@@ -3,6 +3,8 @@ extends Camera2D
 ## Follows the player (it's parented to them), shakes on impact, and — the .io touch —
 ## zooms OUT as the player grows, so your ever-bigger stone always stays on screen.
 
+const KICK_MAX := 42.0   ## hard cap on the directional kick offset, so a bad caller can't fling the view off-screen
+
 var _shake := 0.0
 var _kick := Vector2.ZERO
 var _rng := RandomNumberGenerator.new()
@@ -22,10 +24,20 @@ func _ready() -> void:
 func add_shake(amount: float, dir := Vector2.ZERO) -> void:
 	_shake = minf(_shake + amount, 60.0)
 	if dir != Vector2.ZERO:
-		_kick += dir * amount * 0.35
+		# Normalize the direction (callers may pass a full impulse vector) and clamp the
+		# accumulated kick, so the view can never be flung far off the player.
+		_kick = (_kick + dir.normalized() * amount * 0.35).limit_length(KICK_MAX)
 
 func kick(amount: float) -> void:
 	_shake = minf(_shake + amount, 80.0)
+
+## Snap the camera onto the player instantly (no smoothing slide, no leftover shake/kick).
+## Used on (re)spawn so a teleport doesn't make the view glide across the whole map.
+func snap() -> void:
+	_kick = Vector2.ZERO
+	_shake = 0.0
+	offset = Vector2.ZERO
+	reset_smoothing()
 
 func _process(delta: float) -> void:
 	var f := get_parent() as Fighter

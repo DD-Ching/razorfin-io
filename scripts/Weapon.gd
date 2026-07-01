@@ -232,9 +232,9 @@ func _check_clash(delta: float) -> void:
 		_avel = -_avel * 0.6
 		_clash_cd = 0.28
 		if _owner and ow._owner:
-			var push := (_owner.global_position - ow._owner.global_position).normalized() * 170.0
-			_owner.lunge(push)
-			_owner.on_hit_feedback(14.0, push, false)
+			var dir := (_owner.global_position - ow._owner.global_position).normalized()
+			_owner.lunge(dir * 170.0)
+			_owner.on_hit_feedback(14.0, dir, false)   # pass a UNIT dir — a full impulse here flung the camera
 			# Both weapons run this each frame — emit the shared popup from just one side.
 			if _owner.get_instance_id() < ow._owner.get_instance_id():
 				var mid := (_head_at() + ow._head_at()) * 0.5

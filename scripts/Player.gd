@@ -21,6 +21,11 @@ func _ready() -> void:
 	camera = GameCamera.new()
 	add_child(camera)
 
+func spawn_setup(pos: Vector2, m: float, nm: String, col: Color) -> void:
+	super.spawn_setup(pos, m, nm, col)
+	if camera:
+		camera.snap()   # don't let the smoothed camera glide across the map after a respawn teleport
+
 func _control(delta: float) -> void:
 	var tc := _touch()
 	var on_touch: bool = tc != null and tc.enabled
