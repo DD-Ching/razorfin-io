@@ -49,7 +49,8 @@ var _bubble_cd := 0.0
 var _bleed_t := 0.0               ## the saw's wound — damage over time
 var _bleed_dps := 0.0
 var _venom_t := 0.0               ## the ray's barb — slow + light damage over time
-var _eye_poke := 0.0              ## cartoon ✕✕-eyes timer — something sharp found our face
+var _blink := 0.0                 ## >0 while mid-blink — no mechanic, they just blink (可愛)
+var _blink_cd := 2.0              ## seconds until the next blink
 var _drip_cd := 0.0
 var _hitter: Fighter = null       ## who wounded us last (credits a wound-death)
 var _last_facing := 0.0
@@ -113,7 +114,7 @@ func _physics_process(delta: float) -> void:
 	# (0.045 rad ≈ the silhouette turning ~1px) — a wound tint or bar change always repaints.
 	var health_i := int(health)
 	if _hurt > 0.0 or _invuln > 0.0 or _ghosts.size() > 0 \
-			or _bleed_t > 0.0 or _venom_t > 0.0 or _eye_poke > 0.0 \
+			or _bleed_t > 0.0 or _venom_t > 0.0 \
 			or absf(facing - _last_facing) > 0.045 \
 			or health_i != _last_health_i or wet != _wet_drawn:
 		_last_facing = facing
@@ -235,8 +236,17 @@ func _tick(delta: float) -> void:
 	if _venom_t > 0.0:
 		_venom_t = maxf(0.0, _venom_t - delta)
 		_wound(Game.VENOM_DPS * delta)
-	if _eye_poke > 0.0:
-		_eye_poke = maxf(0.0, _eye_poke - delta)
+	# The blink: every few seconds the eyes close for a beat. No mechanic — just alive.
+	# Two explicit redraws per blink (close + open); the closed frames repaint nothing.
+	_blink_cd -= delta
+	if _blink_cd <= 0.0:
+		_blink_cd = Game.rng().randf_range(2.2, 5.5)
+		_blink = 0.13
+		queue_redraw()
+	elif _blink > 0.0:
+		_blink = maxf(0.0, _blink - delta)
+		if _blink == 0.0:
+			queue_redraw()
 	if _chime_time > 0.0:
 		_chime_time = maxf(0.0, _chime_time - delta)
 		if _chime_time == 0.0:
@@ -270,12 +280,6 @@ func apply_bleed(dps: float, from: Fighter) -> void:
 	_bleed_dps = maxf(dps, _bleed_dps if _bleed_t > 0.0 else 0.0)
 	_bleed_t = Game.BLEED_TIME
 	_hitter = from
-
-## Something sharp found our face — the ocean's cutest wound. Purely cosmetic:
-## the eyes squeeze into a cartoon ✕✕ for a beat (the crit damage already landed).
-func poke_eyes() -> void:
-	_eye_poke = 0.9
-	queue_redraw()
 
 ## The ray's barb: slow + light damage over time.
 func apply_venom(from: Fighter) -> void:
@@ -397,7 +401,8 @@ func spawn_setup(pos: Vector2, m: float, nm: String, col: Color) -> void:
 	_cushion = 0.0
 	_bleed_t = 0.0
 	_venom_t = 0.0
-	_eye_poke = 0.0
+	_blink = 0.0
+	_blink_cd = Game.rng().randf_range(0.5, 4.0)   # desync the school's blinks
 	_hitter = null
 	_boost_ok = true
 	boosting = false
@@ -590,13 +595,10 @@ func _draw_squid_body(col: Color) -> void:
 		draw_circle(_pt(0.42, s * 0.3), body_radius * 0.2, Color(0.95, 0.93, 0.85))
 		_draw_eye(_pt(0.48, s * 0.3), body_radius * 0.11)
 
-## One eye, top-down — a dark dot, or a cartoon ✕ for a beat after an eye poke.
+## One eye, top-down — a dark dot; every few seconds it closes into a soft line. Blink.
 func _draw_eye(p: Vector2, r: float) -> void:
-	if _eye_poke > 0.0:
-		var c := Color(0.12, 0.1, 0.12)
-		var e := r * 1.4
-		var w := maxf(2.0, r * 0.5)
-		draw_line(p + Vector2(-e, -e), p + Vector2(e, e), c, w)
-		draw_line(p + Vector2(-e, e), p + Vector2(e, -e), c, w)
+	if _blink > 0.0:
+		var d := Vector2.RIGHT.rotated(facing) * r * 1.3
+		draw_line(p - d, p + d, Color(0.12, 0.1, 0.12), maxf(2.0, r * 0.45))
 	else:
 		draw_circle(p, r, Color(0.08, 0.08, 0.1))

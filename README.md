@@ -21,8 +21,7 @@ wounds, and how much is read straight off that part's real speed at contact. Cru
 into someone and you nudge them. **Boost** into them, or **crack a turn** so your
 weapon whips across them, and it's a wound.
 
-And where you GET touched matters too: every predator's sharp bit pokes **EYES** —
-land it on a rival's face for bonus damage (and a very dignified ✕✕ expression).
+And every fish **blinks**. No mechanic, no numbers — they just blink. It's cute.
 
 And the beloved part: rebounds conserve and stack momentum. Clash off enough bodies
 and you'll find yourself going *very* fast. That's not a bug — that's fish.
