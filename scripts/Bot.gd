@@ -16,6 +16,7 @@ enum Mode { WANDER, HUNT, FLEE }
 
 const SIGHT := 640.0
 const FEAR := 460.0
+const GIANT_RATIO := 2.6      ## someone this many times our size reads as a MOUNTAIN of loot
 const GEM_SIGHT := 560.0
 const CRATE_SIGHT := 900.0
 const SEPARATION := 240.0     ## anti-clump radius (bias applied to wandering)
@@ -85,6 +86,8 @@ func _rethink() -> void:
 	_target = null
 	var threat: Fighter = null
 	var threat_d := _fear_dist()
+	var giant: Fighter = null
+	var giant_d := SIGHT * 1.3
 	var prey_cands: Array = []          # up to 3 of {f, d}
 	var crowd_push := Vector2.ZERO
 	var fighters := get_tree().get_nodes_in_group("fighter")
@@ -98,6 +101,9 @@ func _rethink() -> void:
 		var d := global_position.distance_to(f.global_position)
 		if d < SEPARATION:
 			crowd_push += (global_position - f.global_position) / maxf(d, 1.0)
+		if f.mass > mass * GIANT_RATIO and d < giant_d:
+			giant = f
+			giant_d = d
 		if f.mass > mass * _threat_ratio() and d < threat_d:
 			threat = f
 			threat_d = d
@@ -106,6 +112,17 @@ func _rethink() -> void:
 			if p_agg < 1.0 and _height(f.global_position) > my_h + 45.0:
 				continue
 			prey_cands.append({"f": f, "d": d})
+
+	# MOB THE GIANT (以小博大): a fish several times our size is slow, turns like a
+	# barge, and is worth a fortune — so bold bots dart in for hit-and-run bites
+	# instead of fleeing. Rerolled every think tick, so harassers naturally dart in
+	# AND back out; the winded back-off keeps it survivable, and the crown makes the
+	# giant juicier. This is what keeps a huge player hunted instead of lonely.
+	if giant != null and not _winded \
+			and Game.rng().randf() < 0.3 * p_agg + (0.25 if giant.is_king else 0.0):
+		_mode = Mode.HUNT
+		_target = giant
+		return
 
 	if threat != null:
 		_mode = Mode.FLEE

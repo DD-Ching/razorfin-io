@@ -141,13 +141,21 @@ func _integrate(delta: float) -> void:
 	elif stamina >= Game.BOOST_MIN:
 		_boost_ok = true
 	var surging := boosting and _boost_ok and move_dir != Vector2.ZERO
-	var accel := Game.ACCEL
+	# STREAMLINED species (劍魚 above all): growing doesn't fatten them into slowness —
+	# the mass-speed penalty is softened, so a big one slowly builds to a frightening
+	# cruise. The trade: a longer runway (lower accel) and TURNS scrub the speed off —
+	# it swims like a lance, not a dancer.
+	var stream: float = weapon.streamline() if weapon else 0.0
+	var accel := Game.ACCEL * (1.0 - 0.45 * stream)
 	# Shoal drag at your fins only (steering) — knockback and currents still carry in
 	# full, so ramming a rival ONTO a sandbank remains a legitimate setup. Venom slow
 	# works the same way: your muscles are poisoned, physics isn't.
-	var spd := Game.speed_for_mass(mass) * wet
+	var spd := Game.BASE_MAX_SPEED * pow(mass, Game.SPEED_MASS_EXP * (1.0 - 0.55 * stream)) * wet
 	if _venom_t > 0.0:
 		spd *= Game.VENOM_SLOW
+	if stream > 0.0 and move_dir != Vector2.ZERO and _steer.length() > 60.0:
+		var mis := clampf(absf(_steer.angle_to(move_dir)) / PI, 0.0, 1.0)
+		spd *= 1.0 - 0.45 * stream * mis
 	if surging:
 		stamina = maxf(0.0, stamina - Game.BOOST_DRAIN * delta)
 		_stamina_delay = 0.5
@@ -573,14 +581,19 @@ func _draw_shark_body(col: Color, sp: int) -> void:
 		Vector2(0.6, 0.42)], col)
 	if sp != Weapon.Type.HAMMERHEAD:
 		for s in [-1.0, 1.0]:
-			_draw_eye(_pt(0.55, s * 0.24), body_radius * 0.11)
+			_draw_eye(_pt(0.62, s * 0.28), body_radius * 0.13)
 
-## The ray plan: a wide flat disc with wingtips — the tail is the weapon, drawn there.
+## The ray plan: swept wings — a convex leading edge, a concave trailing edge — so it
+## reads as a gliding ray, not a square. The tail is the weapon, drawn behind.
 func _draw_ray_body(col: Color) -> void:
-	_poly([Vector2(0.95, 0.0), Vector2(0.5, -0.6), Vector2(0.05, -1.15), Vector2(-0.55, -0.55),
-		Vector2(-0.85, 0.0), Vector2(-0.55, 0.55), Vector2(0.05, 1.15), Vector2(0.5, 0.6)], col)
+	_poly([Vector2(1.05, 0.0), Vector2(0.5, -0.42), Vector2(0.0, -1.35), Vector2(-0.3, -0.6),
+		Vector2(-0.55, -0.25), Vector2(-0.72, 0.0), Vector2(-0.55, 0.25), Vector2(-0.3, 0.6),
+		Vector2(0.0, 1.35), Vector2(0.5, 0.42)], col)
+	# The ocellated wing spots — the ray's signature, one per wing.
 	for s in [-1.0, 1.0]:
-		_draw_eye(_pt(0.45, s * 0.2), body_radius * 0.11)
+		draw_circle(_pt(-0.02, s * 0.55), body_radius * 0.19, col.darkened(0.35))
+	for s in [-1.0, 1.0]:
+		_draw_eye(_pt(0.55, s * 0.2), body_radius * 0.12)
 
 ## The squid plan: mantle cone pointing BACK, big eyes up front, fins at the rear —
 ## the tentacle club out front is the weapon.
@@ -592,13 +605,14 @@ func _draw_squid_body(col: Color) -> void:
 		Vector2(-1.45, 0.0), Vector2(-1.35, -0.14)], col)
 	# The famous giant eyes.
 	for s in [-1.0, 1.0]:
-		draw_circle(_pt(0.42, s * 0.3), body_radius * 0.2, Color(0.95, 0.93, 0.85))
-		_draw_eye(_pt(0.48, s * 0.3), body_radius * 0.11)
+		_draw_eye(_pt(0.45, s * 0.3), body_radius * 0.16)
 
-## One eye, top-down — a dark dot; every few seconds it closes into a soft line. Blink.
+## One eye, top-down — a white ball with a forward-looking pupil (readable + cute);
+## every few seconds it closes into a soft line. Blink.
 func _draw_eye(p: Vector2, r: float) -> void:
 	if _blink > 0.0:
-		var d := Vector2.RIGHT.rotated(facing) * r * 1.3
-		draw_line(p - d, p + d, Color(0.12, 0.1, 0.12), maxf(2.0, r * 0.45))
+		var d := Vector2.RIGHT.rotated(facing) * r * 1.5
+		draw_line(p - d, p + d, Color(0.12, 0.1, 0.12), maxf(2.0, r * 0.6))
 	else:
-		draw_circle(p, r, Color(0.08, 0.08, 0.1))
+		draw_circle(p, r * 1.45, Color(0.97, 0.96, 0.9))
+		draw_circle(p + Vector2.RIGHT.rotated(facing) * r * 0.35, r * 0.8, Color(0.09, 0.09, 0.12))
