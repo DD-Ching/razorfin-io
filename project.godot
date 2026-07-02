@@ -24,6 +24,7 @@ boot_splash/show_image=false
 
 Game="*res://scripts/Game.gd"
 Sfx="*res://scripts/Sfx.gd"
+CrazySdk="*res://scripts/CrazySdk.gd"
 
 [display]
 
