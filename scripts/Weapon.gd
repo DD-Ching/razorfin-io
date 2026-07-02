@@ -90,6 +90,12 @@ var _circle: CircleShape2D
 var _solid: AnimatableBody2D       ## the physical part — shoves other fish so nothing overlaps
 var _solid_shape: CollisionShape2D
 var _solid_circle: CircleShape2D
+var _hit_capshape: CollisionShape2D   ## the WYSIWYG collider: a capsule fitted to the drawn part
+var _cap: CapsuleShape2D
+var _solid_capshape: CollisionShape2D
+var _solid_cap: CapsuleShape2D
+var _reach_ext := 0.0              ## how far the part sticks out past the arm point (per species)
+var _solid_on := true              ## alive/dead toggle for the physical part
 
 func _ready() -> void:
 	_owner = get_parent() as Fighter
@@ -105,6 +111,10 @@ func _ready() -> void:
 	_hitshape = CollisionShape2D.new()
 	_hitshape.shape = _circle
 	_hitbox.add_child(_hitshape)
+	_cap = CapsuleShape2D.new()
+	_hit_capshape = CollisionShape2D.new()
+	_hit_capshape.shape = _cap
+	_hitbox.add_child(_hit_capshape)
 	add_child(_hitbox)
 	# Weapon-vs-weapon contact is EVENT-driven: the physics server tells us when another
 	# part starts/stops touching ours, so the per-frame clash check is a no-op unless a
@@ -124,6 +134,10 @@ func _ready() -> void:
 	_solid_shape = CollisionShape2D.new()
 	_solid_shape.shape = _solid_circle
 	_solid.add_child(_solid_shape)
+	_solid_cap = CapsuleShape2D.new()
+	_solid_capshape = CollisionShape2D.new()
+	_solid_capshape.shape = _solid_cap
+	_solid.add_child(_solid_capshape)
 	add_child(_solid)
 	if _owner:
 		_solid.add_collision_exception_with(_owner)
@@ -169,6 +183,7 @@ func refresh_scale(mass: float) -> void:
 		_circle.radius = _head_radius * 0.98
 	if _solid_circle:
 		_solid_circle.radius = _head_radius * 0.95
+	_fit_collider_to_silhouette()
 
 # --- control API (Fighter feeds the facing; species does the rest) -----------------
 
@@ -177,17 +192,85 @@ func refresh_scale(mass: float) -> void:
 func aim_at(angle: float) -> void:
 	_target_aim = angle + (PI if is_rear_anchored() else 0.0)
 
+## WYSIWYG colliders (所見即所擋): the hitbox AND the solid body are shaped like the
+## DRAWN weapon — the whole saw blade blocks and wounds, the whole hammer bar, the
+## whole tail whip. No invisible round hitbox: if it looks like it touches, it
+## counts; if it doesn't touch the drawing, it doesn't.
+func _fit_collider_to_silhouette() -> void:
+	if _cap == null:
+		return
+	var r := _head_radius
+	var from_x := 0.0   # capsule span in head-local X (0 = the head point, -arm = the body)
+	var to_x := 0.0
+	var cap_r := r * 0.5
+	var perpendicular := false
+	match type:
+		Type.HAMMERHEAD:
+			# The wide bar + end lobes, PERPENDICULAR to the arm.
+			perpendicular = true
+			cap_r = r * 0.62
+			_reach_ext = r * 0.7
+		Type.SAWFISH:
+			# The whole rostrum, teeth included.
+			from_x = _arm_length * 0.12 - _arm_length
+			to_x = r * 1.6
+			cap_r = r * 0.6
+			_reach_ext = r * 2.2
+		Type.SWORDFISH:
+			# The full bill, root to tip — thin like the drawing.
+			from_x = _arm_length * 0.1 - _arm_length
+			to_x = r * 2.0
+			cap_r = r * 0.45
+			_reach_ext = r * 2.4
+		Type.STINGRAY:
+			# The whole tail whip out to the barb (drawn nearly straight to match).
+			from_x = _arm_length * 0.05 - _arm_length
+			to_x = r * 1.2
+			cap_r = r * 0.5
+			_reach_ext = r * 1.7
+		_:
+			# SQUID: the round club keeps its circle; the capsule covers the arm to it.
+			from_x = _arm_length * 0.2 - _arm_length
+			to_x = -r * 0.4
+			cap_r = r * 0.45
+			_reach_ext = r * 1.0
+	if perpendicular:
+		_cap.radius = cap_r
+		_cap.height = r * 2.8 + cap_r * 2.0
+		_hit_capshape.position = Vector2.ZERO
+		_hit_capshape.rotation = 0.0
+	else:
+		_cap.radius = cap_r
+		_cap.height = maxf(to_x - from_x, cap_r * 2.0)
+		_hit_capshape.position = Vector2((from_x + to_x) * 0.5, 0.0)
+		_hit_capshape.rotation = PI / 2.0
+	_solid_cap.radius = _cap.radius * 0.96
+	_solid_cap.height = _cap.height * 0.96
+	_solid_capshape.position = _hit_capshape.position
+	_solid_capshape.rotation = _hit_capshape.rotation
+	_apply_shape_toggles()
+
+## The head CIRCLE only matches the squid's round club; every other silhouette is the
+## capsule alone. The solid side also folds in the alive/dead toggle.
+func _apply_shape_toggles() -> void:
+	var circle_used := type == Type.SQUID
+	_hitshape.set_deferred("disabled", not circle_used)
+	_hit_capshape.set_deferred("disabled", false)
+	_solid_shape.set_deferred("disabled", not (_solid_on and circle_used))
+	_solid_capshape.set_deferred("disabled", not _solid_on)
+
 ## Enable/disable the physical part (off while the wielder is dead so a corpse's stale
 ## saw can't block the living).
 func set_solid_active(on: bool) -> void:
-	if _solid_shape:
-		_solid_shape.set_deferred("disabled", not on)
+	_solid_on = on
+	if _solid_capshape:
+		_apply_shape_toggles()
 
 func head_speed() -> float:
 	return _head_speed
 
 func reach() -> float:
-	return _arm_length + _head_radius
+	return _arm_length + _reach_ext
 
 ## Settle the part back to a clean idle — used when a fish (re)spawns. Critically,
 ## it re-seeds the position trackers to the CURRENT (post-teleport) position so the
@@ -230,7 +313,9 @@ func _physics_process(delta: float) -> void:
 	if _hitbox:
 		_hitbox.position = Vector2(_head_dist, 0.0)
 	if _solid:
-		_solid.global_position = _head_at()   # drive the physical part (top_level) to the world pos
+		# Drive the physical part (top_level) to the head pose — rotation included, so
+		# the capsule blocks along its whole drawn length, not just at one point.
+		_solid.global_transform = Transform2D(global_rotation, _head_at())
 	var prev_head := _head_world
 	_update_trail(delta)                      # measure this tick's true head travel first...
 	_sweep_contacts(prev_head, _head_world)   # ...then sample the path it skipped (anti-tunneling)
@@ -555,7 +640,8 @@ func _draw_bill(head: Vector2, r: float, speed_t: float, base_col: Color) -> voi
 func _draw_tail(head: Vector2, r: float, speed_t: float, base_col: Color) -> void:
 	var col := _part_color(base_col, speed_t)
 	# The whip: a tapered curve from the body to the barb, sagging against the swing.
-	var sag := clampf(-_avel * 6.0, -r * 1.4, r * 1.4)
+	# The sag is kept SMALL so the drawing stays honest to the straight capsule collider.
+	var sag := clampf(-_avel * 4.0, -r * 0.8, r * 0.8)
 	var x0 := _head_dist * 0.05
 	var prev := Vector2(x0, 0.0)
 	var n := 7
