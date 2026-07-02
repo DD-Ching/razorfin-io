@@ -261,7 +261,7 @@ func _physics_process(delta: float) -> void:
 	key = key * 16 + int(clampf(_head_speed / 1400.0, 0.0, 1.0) * 12.0)
 	key = key * 32 + int(_lift * 24.0)
 	key = key * 4096 + int(_head_dist * 0.25)
-	key = key * 2 + (1 if (_owner and _owner._eye_poke > 0.0) else 0)   # the hammerhead's ✕✕ lives here
+	key = key * 2 + (1 if (_owner and _owner._blink > 0.0) else 0)   # the hammerhead's eyes blink here
 	if key != _draw_key or _trail.size() > 0:
 		_draw_key = key
 		queue_redraw()
@@ -414,17 +414,6 @@ func _score_hit(victim: Fighter, speed: float) -> void:
 	if dir == Vector2.ZERO:
 		dir = Vector2.RIGHT.rotated(_angle)
 	var show_pop: bool = _owner.is_player or victim.is_player   # skip bot-vs-bot popups (churn + clutter)
-	# EYE POKE (戳眼) — the ocean's cutest crit: EVERY species' sharp bit hurts extra when
-	# it lands on the victim's FACE, where the eyes are. Same one rule ("damage is where
-	# you touch"), extended to where you GET touched: the front sector is the soft spot.
-	var to_face := _head_world - victim.global_position
-	if to_face.length() < victim.body_radius * 1.35 \
-			and to_face.normalized().dot(Vector2.RIGHT.rotated(victim.facing)) > 0.55:
-		dmg *= 1.5
-		victim.poke_eyes()
-		Sfx.play(&"chime", victim.global_position, -6.0, 1.7)
-		if show_pop:
-			Game.popup("EYE POKE!", victim.global_position + Vector2(0, -victim.body_radius - 40.0), Color(1.0, 0.62, 0.8), 1.05)
 	# REEF-PIN: if the victim can't fly back (the reef wall behind them), the knockback that
 	# would have become motion becomes DAMAGE instead — so hammering a foe into the reef hurts
 	# far more than knocking them into open water. High-knockback species benefit most.
@@ -521,12 +510,9 @@ func _draw_hammerhead(head: Vector2, r: float, speed_t: float, base_col: Color) 
 	draw_circle(head + half, r * 0.55, col)
 	for s in [-1.0, 1.0]:
 		var eye := head + Vector2(r * 0.28, s * r * 1.5)
-		if _owner and _owner._eye_poke > 0.0:
-			# The hammerhead keeps its eyes on its hammer — so that's where the ✕✕ goes.
-			var c := Color(0.12, 0.1, 0.12)
-			var er := r * 0.24
-			draw_line(eye + Vector2(-er, -er), eye + Vector2(er, er), c, 3.0)
-			draw_line(eye + Vector2(-er, er), eye + Vector2(er, -er), c, 3.0)
+		if _owner and _owner._blink > 0.0:
+			# Mid-blink: the eye closes into a soft line. (They blink. It's cute.)
+			draw_line(eye + Vector2(-r * 0.22, 0), eye + Vector2(r * 0.22, 0), Color(0.12, 0.1, 0.12), 3.0)
 		else:
 			draw_circle(eye, r * 0.2, Color(0.95, 0.95, 0.9))
 			draw_circle(eye + Vector2(r * 0.05, 0), r * 0.1, Color(0.1, 0.1, 0.12))
