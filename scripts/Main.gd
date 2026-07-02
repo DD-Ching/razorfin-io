@@ -1,10 +1,10 @@
 class_name Main
 extends Node2D
-## The arena. Builds the walled play-field, seeds it with food, spawns the player and a
-## roster of rival bots, and keeps the whole thing running .io-style: rivals are topped
-## back up as they fall, gems are replenished, weapon crates drift in, and the
-## leaderboard + your rank refresh a few times a second. On death you spill your loot
-## and wait for a click to lift the stone again.
+## The ocean. Builds the reef-walled play-field, seeds it with food, spawns the player
+## and a roster of rival predators, and keeps the whole thing running .io-style: rivals
+## are topped back up as they fall, morsels are replenished, mutation orbs drift in, and
+## the leaderboard + your rank refresh a few times a second. On death you spill your
+## loot and wait for a tap to swim again.
 
 const CRATE_INTERVAL := 9.0
 const CRATE_CAP := 4
@@ -23,7 +23,7 @@ var _spawn_cd := 0.0
 var _bot_check_cd := 0.0
 var _awaiting_respawn := false
 var _picking := false
-var _chosen_weapon := Weapon.Type.STONE
+var _chosen_weapon := Weapon.Type.HAMMERHEAD
 var _king: Fighter = null   ## current crown holder (hysteresis — see _update_crown)
 
 func _ready() -> void:
@@ -55,12 +55,13 @@ func _ready() -> void:
 	touch = TouchControls.new()
 	layer.add_child(touch)
 
-	# Dev weapon picker at the start (desktop). On touch we just default to the Stone.
+	# Species picker at the start (desktop). On touch we default to the Hammerhead —
+	# mutation orbs in the water let phones switch species mid-run.
 	if not touch.enabled:
 		_picking = true
 		Game.picking = true
 		player.set_physics_process(false)
-		player.weapon.set_solid_active(false)      # don't let the frozen player's stone shove bots while picking
+		player.weapon.set_solid_active(false)      # don't let the frozen player's weapon shove bots while picking
 		player.weapon.set_physics_process(false)
 
 func _process(delta: float) -> void:
@@ -103,7 +104,7 @@ func _spawn_bot() -> void:
 	b.mass = start_mass
 	add_child(b)
 	b.spawn_setup(_rand_pos(), start_mass, Game.random_name(), Game.random_color())
-	b.weapon.set_type(b.preferred_weapon)   # loadout matches temperament (hammer bots slam, etc.)
+	b.weapon.set_type(b.preferred_species)   # species matches temperament
 	b.died.connect(_on_fighter_died)
 
 func _maintain_bots() -> void:
@@ -171,7 +172,8 @@ func _add_field(kind: int) -> void:
 	f.setup(kind, pos, Game.rng().randf_range(190.0, 300.0), Vector2.RIGHT.rotated(Game.rng().randf() * TAU))
 
 func _rand_weapon_type() -> int:
-	var pool := [Weapon.Type.STONE, Weapon.Type.HAMMER, Weapon.Type.SICKLE, Weapon.Type.STAFF]
+	var pool := [Weapon.Type.HAMMERHEAD, Weapon.Type.SAWFISH, Weapon.Type.SWORDFISH,
+		Weapon.Type.STINGRAY, Weapon.Type.SQUID]
 	return pool[Game.rng().randi() % pool.size()]
 
 func _rand_pos() -> Vector2:
@@ -213,15 +215,16 @@ func _respawn_player() -> void:
 	player.weapon.set_type(_chosen_weapon)   # keep the weapon you picked
 	Game.player_spawned.emit()
 
-## Dev: number keys 1-4 pick / switch the player's weapon at any time.
+## Dev: number keys 1-5 pick / switch the player's species at any time.
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		var t := -1
 		match event.keycode:
-			KEY_1: t = Weapon.Type.STONE
-			KEY_2: t = Weapon.Type.HAMMER
-			KEY_3: t = Weapon.Type.SICKLE
-			KEY_4: t = Weapon.Type.STAFF
+			KEY_1: t = Weapon.Type.HAMMERHEAD
+			KEY_2: t = Weapon.Type.SAWFISH
+			KEY_3: t = Weapon.Type.SWORDFISH
+			KEY_4: t = Weapon.Type.STINGRAY
+			KEY_5: t = Weapon.Type.SQUID
 		if t != -1:
 			_choose_weapon(t)
 

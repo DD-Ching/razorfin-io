@@ -1,9 +1,10 @@
 ; Engine configuration file.
-; Whole Stone .io — a 2D top-down physics brawler.
+; Razorfin .io — a 2D top-down physics brawler in the open ocean.
 ;
-; Arthur failed to draw the sword, so he lifted the ENTIRE stone. Swing the boulder,
-; smash rival knights, absorb what they drop, and grow. Bigger hits harder and reaches
-; further, but drags slower — weight versus mobility, all the way up the leaderboard.
+; Apex predators with built-in weapons: ram with the hammerhead, slash with the saw,
+; joust with the swordfish bill, crack the stingray's venom tail. Damage is WHERE you
+; touch — the weapon part wounds, the body only shoves. Steer with one finger, hold
+; one button to boost. Eat what they spill, and grow.
 ;
 ; Open by pointing Godot 4.7+ at this folder. Everything is code-built placeholder art,
 ; so it runs straight from a clean checkout with no asset pipeline.
@@ -12,8 +13,8 @@ config_version=5
 
 [application]
 
-config/name="Whole Stone .io"
-config/description="A physics top-down .io brawler where Arthur swings the whole stone. Grow by smashing rivals."
+config/name="Razorfin .io"
+config/description="A physics top-down .io brawler where apex sea predators ram, saw and sting. Grow by eating rivals."
 run/main_scene="res://scenes/Main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
@@ -46,7 +47,7 @@ common/max_physics_steps_per_frame=4
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
-environment/defaults/default_clear_color=Color(0.09, 0.09, 0.13, 1)
+environment/defaults/default_clear_color=Color(0.02, 0.05, 0.12, 1)
 
 [input]
 
@@ -77,11 +78,6 @@ move_down={
 attack={
 "deadzone": 0.5,
 "events": [Object(InputEventMouseButton,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"button_mask":0,"position":Vector2(0, 0),"global_position":Vector2(0, 0),"factor":1.0,"button_index":1,"canceled":false,"pressed":false,"double_click":false,"script":null)
-]
-}
-slam={
-"deadzone": 0.5,
-"events": [Object(InputEventMouseButton,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"button_mask":0,"position":Vector2(0, 0),"global_position":Vector2(0, 0),"factor":1.0,"button_index":2,"canceled":false,"pressed":false,"double_click":false,"script":null)
 ]
 }
 spin={

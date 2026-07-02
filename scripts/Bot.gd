@@ -1,16 +1,16 @@
 class_name Bot
 extends Fighter
-## A rival knight. Same food-chain core as ever — HUNT smaller, FLEE bigger, WANDER
-## toward loot — but every bot now has a TEMPERAMENT (two rolled scalars), pays real
-## stamina like the player, reads the terrain, and knows when to slam. All of it rides
-## the exact same physics path the player uses (aim_at / set_swinging / do_slam), so
-## nothing here is a scripted cheat: bots win with the same tools you have.
+## A rival predator. Same food-chain core as ever — HUNT smaller, FLEE bigger, WANDER
+## toward loot — and every bot has a TEMPERAMENT (two rolled scalars), pays real
+## boost stamina like the player, and reads the water. All of it rides the exact same
+## physics path the player uses (move_dir + boosting), so nothing here is a scripted
+## cheat: bots win with the same two inputs you have.
 ##
 ## PERCEPTION WHITELIST (the anti-cheat contract — keep future tweaks inside it):
 ## a bot may read only what a player could see: positions, velocities, mass/size,
-## weapon type + state (the whirl and slam telegraph are drawn on screen), its OWN
-## stamina/health, terrain height/slope (the map is drawn), and is_pinned() (a wall
-## behind someone is visible). NEVER an opponent's stamina — that bar isn't rendered.
+## species (the silhouette is drawn), its OWN stamina/health, terrain depth/slope
+## (the map is drawn), and is_pinned() (the reef behind someone is visible).
+## NEVER an opponent's stamina — that bar isn't rendered.
 
 enum Mode { WANDER, HUNT, FLEE }
 
@@ -22,35 +22,29 @@ const SEPARATION := 240.0     ## anti-clump radius (bias applied to wandering)
 
 var p_agg := 1.0              ## aggression 0.7..1.4 — 1.0 reproduces the old thresholds exactly
 var p_greed := 1.0            ## loot appetite 0.6..1.5
-var preferred_weapon: int = Weapon.Type.STONE
-var whirl_speed := 7.5        ## rad/s while attacking — randomized so attack rhythms differ
+var preferred_species: int = Weapon.Type.HAMMERHEAD
 
 var _mode: int = Mode.WANDER
 var _target: Fighter
 var _think_cd := 0.0
 var _wander_dir := Vector2.RIGHT
 var _wander_pickup: Node2D = null   ## chosen at rethink — never re-scanned per frame
-var _spin_sign := 1.0
-var _aim := 0.0
+var _orbit_sign := 1.0        ## which way this ray circles for its drive-by tail whip
 var _winded := false          ## stamina hysteresis: back off under 25, re-engage over 65
-var _slam_cd := 0.0
-var _slam_roll_cd := 0.0
 var _terrain: Terrain
 
 func _ready() -> void:
-	# Bots pay for slams, whirls and whip-work like everyone else — a free infinite
-	# whirl was an UNCOUNTERABLE defense. The mild regen edge is their handicap for
-	# managing the bar without a brain.
-	uses_stamina = true
+	# Bots pay for boosts like everyone else — free infinite pursuit would be an
+	# UNCOUNTERABLE threat. The mild regen edge is their handicap for managing the
+	# bar without a brain.
 	stamina_regen_mult = 1.25
 	var rng := Game.rng()
 	p_agg = rng.randf_range(0.7, 1.4)
 	p_greed = rng.randf_range(0.6, 1.5)
-	preferred_weapon = [Weapon.Type.STONE, Weapon.Type.HAMMER, Weapon.Type.SICKLE, Weapon.Type.STAFF][rng.randi() % 4]
-	whirl_speed = 7.5 * rng.randf_range(0.8, 1.2)
+	preferred_species = [Weapon.Type.HAMMERHEAD, Weapon.Type.SAWFISH, Weapon.Type.SWORDFISH,
+		Weapon.Type.STINGRAY, Weapon.Type.SQUID][rng.randi() % 5]
 	super._ready()
-	_aim = rng.randf() * TAU
-	_spin_sign = 1.0 if rng.randf() < 0.5 else -1.0
+	_orbit_sign = 1.0 if rng.randf() < 0.5 else -1.0
 	_wander_dir = Vector2.RIGHT.rotated(rng.randf() * TAU)
 
 # --- temperament-derived thresholds (agg 1.0 == the old hardcoded numbers) ----------
@@ -64,21 +58,8 @@ func _threat_ratio() -> float:
 func _fear_dist() -> float:
 	return FEAR / p_agg                                # skittish bots break early
 
-## How eagerly this loadout slams: the hammer IS a slam weapon, the sickle isn't.
-func _slam_prop() -> float:
-	match weapon.type:
-		Weapon.Type.HAMMER:
-			return 1.0
-		Weapon.Type.STONE:
-			return 0.7
-		Weapon.Type.STAFF:
-			return 0.5
-		_:
-			return 0.3
-
 func _control(delta: float) -> void:
-	_slam_cd = maxf(0.0, _slam_cd - delta)
-	_slam_roll_cd = maxf(0.0, _slam_roll_cd - delta)
+	boosting = false   # each mode re-asserts it; default is cruise
 	_think_cd -= delta
 	if _think_cd <= 0.0:
 		_rethink()
@@ -121,7 +102,7 @@ func _rethink() -> void:
 			threat = f
 			threat_d = d
 		elif f.mass < mass * _prey_ratio() and d < SIGHT:
-			# Timid bots don't start fights they'd have to climb into.
+			# Timid bots don't chase prey up into the draggy shallows.
 			if p_agg < 1.0 and _height(f.global_position) > my_h + 45.0:
 				continue
 			prey_cands.append({"f": f, "d": d})
@@ -171,9 +152,9 @@ func _pick_prey(cands: Array, fighters: Array) -> Fighter:
 			return cands[i]["f"] as Fighter
 	return cands[0]["f"] as Fighter
 
-## Choose ONE pickup at rethink (never per frame): gems value-weighted by distance,
-## crates only if they'd change our loadout toward what we want — with a claim check
-## so 13 bots don't converge on the same shiny thing.
+## Choose ONE pickup at rethink (never per frame): morsels value-weighted by distance,
+## mutation orbs only if they'd change us toward the species we want — with a claim
+## check so 13 bots don't converge on the same shiny thing.
 func _pick_pickup(fighters: Array) -> Node2D:
 	var best: Node2D = null
 	var best_score := 0.0
@@ -193,7 +174,7 @@ func _pick_pickup(fighters: Array) -> Node2D:
 		else:
 			if d > crate_sight or pk.weapon_type == weapon.type:
 				continue
-			if pk.weapon_type != preferred_weapon and weapon.type != Weapon.Type.STONE:
+			if pk.weapon_type != preferred_species:
 				continue
 			score = 1.2 / (d + 200.0)
 		if score > best_score:
@@ -211,134 +192,90 @@ func _pick_pickup(fighters: Array) -> Node2D:
 func _target_gone() -> bool:
 	return _target == null or not is_instance_valid(_target) or _target._dead
 
-func _do_hunt(delta: float) -> void:
-	weapon.set_spin(false)   # hunting whips via aim-rotation, never the whirl — clear any leftover SPIN
+func _do_hunt(_delta: float) -> void:
 	if _target_gone():
 		_mode = Mode.WANDER
-		weapon.set_swinging(false)
 		return
 	var to := _target.global_position - global_position
 	var d := to.length()
 
-	# Winded: give ground and guard with the passive whip until the bar recovers —
-	# the visible opening IS the counterplay against bot pressure.
+	# Winded: give ground until the bar recovers — the visible opening IS the
+	# counterplay against bot pressure.
 	if _winded:
-		weapon.set_swinging(false)
-		weapon.aim_at(to.angle())
 		move_dir = -to.normalized() * 0.7
 		return
 
 	var strike := weapon.reach() + _target.body_radius + 44.0
-	if d <= strike:
-		_try_slam(to, d)
-		# In range: whirl the head by rotating the aim, and shove in.
-		_aim += _spin_sign * whirl_speed * delta
-		weapon.aim_at(_aim)
-		weapon.set_swinging(true)
-		move_dir = to.normalized() * 0.5
-	else:
-		weapon.set_swinging(false)
-		weapon.aim_at(to.angle())
-		_aim = to.angle()
-		move_dir = _approach_dir(to)
+	# A ray's weapon trails BEHIND it: it hunts by driving PAST prey so the turn cracks
+	# the tail across them. Everyone else just leads the target and rams it head-on.
+	if weapon.is_rear_anchored() and d <= strike * 1.2:
+		var orbit := to.orthogonal().normalized() * _orbit_sign
+		move_dir = (orbit * 0.9 + to.normalized() * 0.35).normalized()
+		boosting = stamina > 30.0
+		return
+	# Lead a moving target so the ram actually connects.
+	var lead := _target.global_position + _target.velocity * clampf(d / maxf(Game.speed_for_mass(mass), 1.0), 0.0, 0.6)
+	var aim := (lead - global_position).normalized()
+	move_dir = _approach_dir(lead - global_position)
+	# Boost only when LINED UP — a sideways boost is stamina thrown away.
+	var lined := Vector2.RIGHT.rotated(facing).dot(aim) > 0.75
+	boosting = lined and d < 700.0 and d > strike * 0.3 and stamina > 35.0
 
-## Slam when it will actually LAND: target too slow to dodge the windup, turtled in a
-## whirl (the slam's radial burst is the designed whirl-counter), or pinned. Every
-## trigger is observable — no stamina peeking.
-func _try_slam(to: Vector2, d: float) -> void:
-	if _slam_cd > 0.0 or _slam_roll_cd > 0.0 or weapon.is_busy():
-		return
-	_slam_roll_cd = 0.35
-	if stamina < 55.0 or health <= max_health * 0.35:
-		return
-	if d > weapon.reach() * 1.15 + _target.body_radius:
-		return
-	var landable: bool = _target.velocity.length() < 130.0 \
-		or _target.weapon.state == Weapon.State.SPIN \
-		or _target.is_pinned(to.normalized())
-	if not landable:
-		return
-	if Game.rng().randf() < 0.55 * _slam_prop() * p_agg:
-		weapon.aim_at(to.angle())
-		weapon.do_slam()
-		_slam_cd = Game.rng().randf_range(2.5, 4.5) / p_agg
-
-## Approach with the land in mind: when the shortest path is a steep climb, switchback
-## along the contour and take the high ground first — knocked prey then tumbles
-## DOWNHILL into our free chase speed. Pure positioning; the physics does the rest.
+## Approach with the water in mind: when the straight line climbs onto a shoal,
+## switchback along the contour and keep the deep — knocked prey then drifts down
+## the slope into our free chase speed. Pure positioning; the physics does the rest.
 func _approach_dir(to: Vector2) -> Vector2:
 	var t := _terrain_node()
 	if t == null:
 		return to.normalized()
 	var grad := t.gradient_at(global_position)
 	var to_n := to.normalized()
-	if grad.length() > 0.12 and to_n.dot(grad.normalized()) > 0.55:   # heading hard uphill
+	if grad.length() > 0.12 and to_n.dot(grad.normalized()) > 0.55:   # heading hard up the bank
 		var along := grad.orthogonal().normalized()
 		if along.dot(to_n) < 0.0:
 			along = -along
 		return (to_n * 0.5 + along * 0.6).normalized()
 	return to_n
 
-func _do_flee(delta: float) -> void:
+func _do_flee(_delta: float) -> void:
 	if _target_gone():
 		_mode = Mode.WANDER
-		weapon.set_spin(false)   # don't leave the whirl running when the threat vanishes at close range
 		return
 	var away := global_position - _target.global_position
 	var flee := away.normalized()
 
-	# Borrow the downhill boost — it decides chases between near-equal speeds, and it
-	# LOOKS like the bot knows the map. But never flee into a wall (that gifts the
-	# wall-pin execution) or into water (the slow pool is where fleers go to die).
+	# Run for the DEEP — the down-slope current decides chases between near-equal
+	# speeds, and it LOOKS like the bot knows the water. But never flee onto a
+	# sandbank (the drag pool is where fleers go to die) or into the reef wall
+	# (that gifts the reef-pin execution).
 	var t := _terrain_node()
 	if t != null:
 		var grad: Vector2 = t.gradient_at(global_position)
 		if grad.length() > 0.12:
 			flee = (flee + (-grad).normalized() * 0.45).normalized()
-		if t.norm_height(global_position + flee * 200.0) < Game.COAST_T:
+		if t.norm_height(global_position + flee * 200.0) > Game.SHOAL_T:
 			var along := grad.orthogonal().normalized()
 			if along.dot(flee) < 0.0:
 				along = -along
 			flee = (along * 0.8 + flee * 0.3).normalized()
 	if is_pinned(flee):
-		# Rotate along the wall, toward the arena centre (corners are execution zones).
+		# Rotate along the wall, toward open water (corners are execution zones).
 		var toward_centre := -global_position
 		var cw := flee.orthogonal()
 		flee = cw if cw.dot(toward_centre) > 0.0 else -cw
-		# Cornered AND in reach? Desperation slam to blast free.
-		if away.length() < weapon.reach() + 40.0 and _slam_cd <= 0.0 \
-				and stamina >= 55.0 and not weapon.is_busy():
-			weapon.aim_at((-away).angle())
-			weapon.do_slam()
-			_slam_cd = Game.rng().randf_range(2.5, 4.5)
 	move_dir = flee
+	# Burn the bar to break contact only when the threat is really on top of us.
+	boosting = away.length() < 340.0 and stamina > 20.0 and not _winded
 
-	# Whirl defensively if the bigger fighter is right on top of us — but only with the
-	# stamina to sustain it; a winded bot must run on legs alone (counterable pressure).
-	if away.length() < weapon.reach() + _target.body_radius + 30.0 \
-			and stamina >= 35.0 and not _winded:
-		_aim += _spin_sign * whirl_speed * delta
-		weapon.aim_at(_aim)
-		weapon.set_spin(true)
-	else:
-		weapon.set_spin(false)
-		weapon.aim_at(away.angle())
-
-func _do_wander(delta: float) -> void:
-	weapon.set_swinging(false)
-	weapon.set_spin(false)
+func _do_wander(_delta: float) -> void:
 	# Steer at the pickup chosen at rethink; if it got eaten meanwhile, drift until the
 	# next think tick rather than re-scanning the whole group mid-frame.
 	if _wander_pickup != null and (not is_instance_valid(_wander_pickup) or (_wander_pickup as Pickup).consumed):
 		_wander_pickup = null
 	if _wander_pickup != null:
-		var to: Vector2 = _wander_pickup.global_position - global_position
-		move_dir = to.normalized()
-		weapon.aim_at(to.angle())
+		move_dir = (_wander_pickup.global_position - global_position).normalized()
 	else:
 		move_dir = _wander_dir
-		_aim += delta * 0.6
-		weapon.aim_at(_aim)
 
 func _height(p: Vector2) -> float:
 	var t := _terrain_node()

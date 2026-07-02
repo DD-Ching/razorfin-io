@@ -151,13 +151,13 @@ func _draw() -> void:
 		draw_rect(Rect2(bx, by, bw, 12), Color(0, 0, 0, 0.5))
 		var sf := clampf(player.stamina / Game.STAMINA_MAX, 0.0, 1.0)
 		draw_rect(Rect2(bx, by, bw * sf, 12), Color(0.35, 0.7, 1.0))
-		_text("stam", "STAMINA", Vector2(bx, by - 4), 12, Color(0.7, 0.85, 1.0))
+		_text("stam", "BOOST", Vector2(bx, by - 4), 12, Color(0.7, 0.85, 1.0))
 		draw_rect(Rect2(bx, by + 18, bw, 12), Color(0, 0, 0, 0.5))
 		var hf := clampf(player.health / player.max_health, 0.0, 1.0)
 		draw_rect(Rect2(bx, by + 18, bw * hf, 12), Color(0.4, 0.85, 0.45).lerp(Color(0.9, 0.35, 0.3), 1.0 - hf))
 
-	var hint := "LEFT stick move   •   RIGHT stick to whip the stone   •   SLAM / WHIRL buttons" if touch \
-		else "WASD move   •   drag MOUSE to whip the stone   •   LMB swing   •   RMB slam   •   SPACE whirl"
+	var hint := "RIGHT thumb steer   •   hold LEFT thumb to BOOST" if touch \
+		else "steer with the MOUSE   •   hold LMB / SPACE to BOOST   •   hit them with your weapon, not your body"
 	var htl := _slot("hint", hint, 14)
 	var hint_y := (vp.y - 150.0) if touch else (vp.y - 14.0)
 	_text("hint", hint, Vector2(vp.x * 0.5 - htl.get_size().x * 0.5, hint_y), 14, Color(0.75, 0.75, 0.8))
@@ -165,9 +165,9 @@ func _draw() -> void:
 	# --- death overlay ---
 	if _dead:
 		draw_rect(Rect2(Vector2.ZERO, vp), Color(0, 0, 0, 0.55))
-		_center("d1", "YOU GOT SMASHED", vp, -70, 46, Color(1, 0.5, 0.45))
+		_center("d1", "YOU GOT EATEN", vp, -70, 46, Color(1, 0.5, 0.45))
 		_center("d2", "Final size %d   •   You finished #%d" % [_final_score, _final_rank], vp, -8, 22, Color(1, 0.95, 0.8))
-		var rehint := "TAP to lift the stone again" if touch else "Press  R  or  CLICK  to lift the stone again"
+		var rehint := "TAP to swim again" if touch else "Press  R  or  CLICK  to swim again"
 		_center("d3", rehint, vp, 44, 20, Color(0.85, 0.9, 1.0))
 
 	# --- portrait nudge (phones): the game is landscape-first ---
@@ -176,13 +176,13 @@ func _draw() -> void:
 		_center("r1", "ROTATE YOUR DEVICE", vp, -20, 30, Color(1, 0.95, 0.75))
 		_center("r2", "to landscape to play", vp, 20, 22, Color(0.85, 0.85, 0.92))
 
-	# --- start weapon picker (desktop dev) ---
+	# --- start species picker (desktop dev) ---
 	if Game.picking:
 		draw_rect(Rect2(Vector2.ZERO, vp), Color(0, 0, 0, 0.6))
-		_center("p1", "WHOLE STONE .io", vp, -120, 40, Color(1, 0.9, 0.55))
-		_center("p2", "Choose your weapon", vp, -68, 24, Color(1, 0.95, 0.85))
-		_center("p3", "[1] STONE     [2] HAMMER     [3] SICKLE     [4] STAFF", vp, -16, 22, Color(0.85, 0.9, 1.0))
-		_center("p4", "press 1-4   (you can switch anytime — dev)", vp, 24, 15, Color(0.7, 0.72, 0.82))
+		_center("p1", "RAZORFIN .io", vp, -120, 40, Color(0.6, 0.95, 1.0))
+		_center("p2", "Choose your predator", vp, -68, 24, Color(1, 0.95, 0.85))
+		_center("p3", "[1] HAMMERHEAD   [2] SAWFISH   [3] SWORDFISH   [4] STINGRAY   [5] SQUID", vp, -16, 20, Color(0.85, 0.9, 1.0))
+		_center("p4", "press 1-5   (you can switch anytime — dev)", vp, 24, 15, Color(0.7, 0.72, 0.82))
 
 ## Edge chevrons for fighters that OUTWEIGH the player, close but off-screen — answers
 ## the one question that causes unfair-feeling deaths ("is something huge coming?")

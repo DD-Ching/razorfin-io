@@ -1,11 +1,11 @@
 extends Node
 ## Game — the single global tuning + run-state hub (autoloaded as "Game").
 ##
-## Everything the arena and the HUD need to agree on lives here: the shared tuning
+## Everything the ocean and the HUD need to agree on lives here: the shared tuning
 ## constants, the run's score/best/kills, the collision-bit layout, and a small pool
-## of bot names + colours. Keeping the numbers in one place means the whole game can
+## of rival names + colours. Keeping the numbers in one place means the whole game can
 ## be re-tuned from a single file, and the HUD only ever listens to THIS node — the
-## arena pushes state up through here, so nothing reaches across the scene tree.
+## ocean pushes state up through here, so nothing reaches across the scene tree.
 
 # --- signals the HUD listens to --------------------------------------------------
 signal score_changed(score: int, best: int)
@@ -17,76 +17,84 @@ signal player_spawned()
 signal feed_event(text: String, gold: bool)   ## kill-feed / crown lines for the HUD
 
 # --- collision bits (kept here so every entity agrees) ---------------------------
-const L_FIGHTER := 1   ## bodies that can be hit / detected by weapons
-const L_PICKUP := 2    ## loose gems + weapon crates
-const L_WALL := 4      ## arena bounds
-const L_FIELD := 8     ## force-field areas (gravity/magnet/repulsor/cushion/current/reversal)
-const L_WEAPON := 16   ## the swung stone head — its own layer so weapons can CLASH with each other
-const L_WEAPON_SOLID := 32   ## the SOLID head body that physically pushes fighters (no overlap; excludes own wielder)
+const L_FIGHTER := 1   ## bodies that can be hit / detected by weapon parts
+const L_PICKUP := 2    ## loose plankton morsels + mutation orbs
+const L_WALL := 4      ## reef bounds
+const L_FIELD := 8     ## force-field areas (shelved, kept for later)
+const L_WEAPON := 16   ## the weapon body part (saw/bill/tail…) — its own layer so parts CLASH
+const L_WEAPON_SOLID := 32   ## the SOLID part body that physically pushes fish (no overlap; excludes own wielder)
 
-# --- arena -----------------------------------------------------------------------
-const ARENA_SIZE := Vector2(4400.0, 3100.0)   ## a big arena — you should feel small in it
+# --- ocean arena -------------------------------------------------------------------
+const ARENA_SIZE := Vector2(4400.0, 3100.0)   ## a big ocean — you should feel small in it
 const WALL_THICK := 120.0
-const BOT_TARGET := 13         ## how many rivals to keep alive in the arena
+const BOT_TARGET := 13         ## how many rival predators to keep alive
 
-# --- growth (the Snake.io hook) --------------------------------------------------
+# --- growth (the .io hook) ---------------------------------------------------------
 const START_MASS := 1.0
 const MAX_MASS := 1000000.0    ## effectively no cap — you can grow without limit (speed/agility fall off naturally)
-const GEM_MASS := 0.16         ## mass gained per gem absorbed
+const GEM_MASS := 0.16         ## mass gained per morsel absorbed
 const KILL_ABSORB := 0.4       ## fraction of a victim's mass the killer gains outright
-const SPILL_FRACTION := 0.75   ## fraction of a victim's mass that scatters as gems
-const AMBIENT_GEMS := 80       ## free gems in the arena (kept modest for perf)
+const SPILL_FRACTION := 0.75   ## fraction of a victim's mass that scatters as morsels
+const AMBIENT_GEMS := 80       ## free morsels in the ocean (kept modest for perf)
 
-# --- body / movement (Arthur's heavy, momentum-based feel) -----------------------
+# --- body / movement (heavy, momentum-based swimming) ------------------------------
 const BASE_BODY_RADIUS := 15.0
-const BASE_MAX_SPEED := 440.0   ## overall movement speed doubled
+const BASE_MAX_SPEED := 440.0
 const SPEED_MASS_EXP := -0.32  ## bigger => slower (weight vs mobility)
 const ACCEL := 900.0           ## dead-weight pickup — slow to get going
-const FRICTION := 560.0        ## keeps drifting when you let go (momentum)
+const FRICTION := 560.0        ## keeps gliding when you let go (momentum)
 const BASE_HEALTH := 60.0
 const HEALTH_PER_MASS := 30.0
 const HEALTH_REGEN := 5.0
 const KNOCK_FRICTION := 620.0  ## how fast a knockback shove bleeds off
 
-# --- combat ----------------------------------------------------------------------
-const HIT_SPEED_MIN := 300.0   ## head speed (px/s) below which contact only nudges, never scores
-const REF_HEAD_SPEED := 1200.0 ## head speed that reads as a "full power" hit
+# --- boost (the ONE button: stamina is boost fuel, nothing else) --------------------
+const BOOST_SPEED_MULT := 1.7  ## top-speed multiplier while boosting (× the species' own boost factor)
+const BOOST_ACCEL_MULT := 2.3  ## surge harder, not just faster
+const BOOST_DRAIN := 32.0      ## stamina per second while the boost is held
+const BOOST_MIN := 6.0         ## can't START a boost below this (prevents 1-frame stutter-boosts)
+const STAMINA_MAX := 100.0
+const STAMINA_REGEN := 30.0
+
+# --- combat (damage is WHERE you touch: weapon part hurts, body only shoves) --------
+const HIT_SPEED_MIN := 300.0   ## part speed (px/s) below which contact only nudges, never wounds
+const REF_HEAD_SPEED := 1200.0 ## part speed that reads as a "full power" hit
 const BASE_DMG := 24.0
 const BASE_KNOCK := 480.0
-const HIT_INTERVAL := 0.32     ## a sustained-fast head re-bites the same target this often
+const HIT_INTERVAL := 0.32     ## a sustained-fast part re-bites the same target this often
 const INVULN := 0.18           ## i-frames after taking a hit
-const PIN_DAMAGE := 0.06       ## bonus damage per unit of knockback absorbed when a victim is pinned to a wall
-const STAMINA_MAX := 100.0
-const STAMINA_REGEN := 26.0
-const SWING_STAMINA_RATE := 20.0             ## (legacy) flat swing drain — superseded by the work model
-const SWING_STAMINA_PER_TORQUE := 0.5        ## stamina per unit of applied whip torque × sqrt(mass) (the "how much force" model)
-const SLAM_STAMINA := 30.0
-const SPIN_STAMINA_RATE := 26.0
+const PIN_DAMAGE := 0.06       ## bonus damage per unit of knockback absorbed when a victim is pinned to the reef
 
-# --- terrain water bands (normalized elevation t in 0..1) -------------------------
-const WATER_T := 0.16          ## below this you are IN water
-const COAST_T := 0.30          ## below this you are in the shallows
-const WATER_SLOW := 0.7        ## steering-speed multiplier in water (knockback unaffected —
-const COAST_SLOW := 0.85       ##  knocking a rival INTO a lake stays a legitimate setup)
+# --- wounds (the only two status effects — readable, no rule salad) ------------------
+const BLEED_TIME := 3.0        ## the saw opens a wound: damage-over-time, refreshed by re-hits
+const VENOM_TIME := 2.4        ## the ray's barb: slow + light damage-over-time
+const VENOM_SLOW := 0.62       ## steering-speed multiplier while envenomed
+const VENOM_DPS := 3.0
+
+# --- terrain: sandbanks are the hazard now (normalized elevation t in 0..1) ---------
+const SHOAL_T := 0.74          ## above this you are over a bright shoal (draggy)
+const SAND_T := 0.86           ## above this you are nearly BEACHED (very slow — open water is safety)
+const SHOAL_SLOW := 0.82       ## steering-speed multiplier over a shoal (knockback unaffected —
+const SAND_SLOW := 0.55        ##  ramming a rival ONTO a sandbank stays a legitimate setup)
 
 # --- run state -------------------------------------------------------------------
 var score := 0
 var best := 0
 var kills := 0
-var picking := false   ## true while the start weapon-picker overlay is up
+var picking := false   ## true while the start species-picker overlay is up
 var player_mass := 1.0 ## the living player's mass — read by nameplate threat tints
 var fx: FxLayer        ## the single shared spark layer (set by Main at build time)
 
 const NAMES := [
-	"Percival", "Gawain", "Lancelot", "Bors", "Kay", "Bedivere", "Tristan",
-	"Galahad", "Mordred", "Gareth", "Lamorak", "Geraint", "Ector", "Pellinore",
-	"Balin", "Dagonet", "Lucan", "Griflet", "Palamedes", "Uwaine",
+	"Mako", "Bruce", "Razor", "Riptide", "Barb", "Sawyer", "Marlin", "Gill",
+	"Kraken", "Abyss", "Torpedo", "Reef", "Dorsal", "Undertow", "Scylla",
+	"Moby", "Tempest", "Drift", "Snapper", "Current",
 ]
 
 const PALETTE := [
 	Color("e05a4d"), Color("e0904d"), Color("d9c24a"), Color("74c04a"),
 	Color("4ac0a3"), Color("4a9ec0"), Color("6a6ae0"), Color("a85ce0"),
-	Color("e05ca8"), Color("c0794a"), Color("58c07a"), Color("c0aa4a"),
+	Color("e05ca8"), Color("7a8ea8"), Color("58c07a"), Color("50b8c8"),
 ]
 
 var _rng := RandomNumberGenerator.new()
@@ -120,7 +128,7 @@ func reset_run() -> void:
 	score_changed.emit(score, best)
 	kills_changed.emit(kills)
 
-## Derived stats shared by every fighter, so player and bots scale identically.
+## Derived stats shared by every fish, so player and bots scale identically.
 static func speed_for_mass(mass: float) -> float:
 	return BASE_MAX_SPEED * pow(mass, SPEED_MASS_EXP)
 
@@ -130,7 +138,7 @@ static func body_radius_for_mass(mass: float) -> float:
 static func health_for_mass(mass: float) -> float:
 	return BASE_HEALTH + HEALTH_PER_MASS * mass
 
-## Agility multiplier for the weapon: heavier => laggier, slower swing.
+## Agility multiplier: heavier => laggier turns, slower weapon whip.
 static func agility_for_mass(mass: float) -> float:
 	return pow(mass, -0.22)
 

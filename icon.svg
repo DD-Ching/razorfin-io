@@ -1,11 +1,17 @@
 <svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
-  <rect width="128" height="128" rx="16" fill="#16161f"/>
-  <!-- the sword, buried in the stone -->
-  <line x1="64" y1="18" x2="64" y2="104" stroke="#d9dbe6" stroke-width="7" stroke-linecap="round"/>
-  <line x1="48" y1="40" x2="80" y2="40" stroke="#e0c66a" stroke-width="7" stroke-linecap="round"/>
-  <!-- the whole stone he lifted -->
-  <circle cx="64" cy="80" r="34" fill="#4b4954"/>
-  <circle cx="52" cy="68" r="12" fill="#5b5966"/>
-  <circle cx="76" cy="86" r="8" fill="#3b3944"/>
-  <circle cx="64" cy="80" r="34" fill="none" stroke="#26242c" stroke-width="4"/>
+  <rect width="128" height="128" rx="16" fill="#071530"/>
+  <!-- depth bands -->
+  <path d="M0 88 Q32 78 64 88 T128 88 V128 H0 Z" fill="#0a2148"/>
+  <path d="M0 106 Q32 98 64 106 T128 106 V128 H0 Z" fill="#0e2e60"/>
+  <!-- the razorfin: a shark silhouette lunging right -->
+  <path d="M14 62 L34 52 30 62 34 72 Z" fill="#3f77a8"/>
+  <path d="M30 62 Q52 40 86 52 L104 44 Q112 56 104 64 Q92 84 56 78 Q38 76 30 62 Z" fill="#5b9cd0"/>
+  <!-- dorsal fin -->
+  <path d="M56 48 L64 30 74 46 Z" fill="#3f77a8"/>
+  <!-- the bill / saw nose -->
+  <path d="M100 50 L124 42 104 60 Z" fill="#dfe8ee"/>
+  <!-- eye -->
+  <circle cx="88" cy="54" r="4" fill="#0a1020"/>
+  <!-- belly glint -->
+  <path d="M48 70 Q68 76 92 66 Q72 80 52 74 Z" fill="#8fc3e8"/>
 </svg>

@@ -1,84 +1,75 @@
 class_name Weapon
 extends Node2D
-## The heavy head on the end of Arthur's arm — the ENTIRE stone he lifted because he
-## could not draw the sword. This is the game's core feel, lifted from the reference
-## main-character design: the head is a spring-damped pendulum that FOLLOWS the aim
-## with weight and lag (never snapping), and DRAGGING the aim around the wielder whips
-## it up to real angular speed. How hard a hit lands is read straight off the head's
-## measured speed at contact — a slow drag only pushes, a fast whip launches.
+## The species' natural WEAPON — the body part that hurts. This is the game's core
+## feel, inherited from the stone-pendulum ancestor: the part is a spring-damped
+## pendulum that FOLLOWS the fish's facing with weight and lag (never snapping), so
+## TURNING fast whips it up to real speed, and ramming carries your whole swim speed
+## into it. How hard a hit lands is read straight off the part's measured speed at
+## contact — brushing past only shoves, a boosted ram or a whipped tail wounds.
 ##
-## Three heads share this one body via a multiplier table:
-##   STONE  — balanced, the default boulder.
-##   HAMMER (錘) — huge knockback + damage, but heavy and laggy to swing.
-##   SICKLE (鐮) — fast, long reach, low knockback, wins on sustained speed.
+## One rule, five species: damage is WHERE you touch. The weapon part hurts; the body
+## only pushes. Every species is this same pendulum with different weight/anchor:
+##   HAMMERHEAD (錘頭鯊) — the wide hammer head: heavy, huge knockback.
+##   SAWFISH (鋸鰩)      — the long toothed saw: reach, opens BLEEDING wounds.
+##   SWORDFISH (劍魚)    — the rigid bill: only the tip, but it lands like a lance.
+##   STINGRAY (魟魚)     — the tail whip, anchored BEHIND: sharp turns crack it, VENOM.
+##   SQUID (大王魷魚)    — the tentacle club: balanced, loose and heavy.
 ##
 ## Built entirely in code (its Area2D hitbox is spawned in _ready), so an entity is
 ## just "attach Weapon as a child of a Fighter" with no scene wiring.
 
-enum Type { STONE, HAMMER, SICKLE, STAFF }
-enum State { IDLE, SWING, SLAM, SPIN }
+enum Type { HAMMERHEAD, SAWFISH, SWORDFISH, STINGRAY, SQUID }
+enum State { IDLE, SWING }
 
-# Per-type multipliers on the shared base feel. Keys: dmg, knock, reach, head,
-# stiff (spring), damp, drag, avel (angular-speed cap).
-# "mass" is the weapon's relative weight: it drives knockback/momentum, inverse swing agility,
-# and stamina cost. Hammer=1.0 (heavy), Sickle=0.5, Staff=0.1 (feather); Stone≈mid.
+# Per-species multipliers on the shared base feel. Keys: dmg, knock, reach, head,
+# stiff (spring), damp, drag, avel (angular-speed cap), boost (species top-speed factor).
+# "mass" is the part's relative weight: it drives knockback/momentum, inverse whip
+# agility, and clash exchanges. "anchor" is +1 (front of the fish) or -1 (the tail).
 const TYPES := {
-	Type.STONE:  {"dmg": 1.0,  "knock": 1.0,  "reach": 1.0,  "head": 1.0,  "stiff": 1.0,  "damp": 1.0,  "drag": 1.0,  "avel": 1.0,  "mass": 0.7, "name": "STONE"},
-	# Hammer (錘): heaviest — huge damage + knockback, but slow to swing. Best against a pinned foe.
-	Type.HAMMER: {"dmg": 1.5,  "knock": 2.0,  "reach": 0.9,  "head": 1.25, "stiff": 0.8,  "damp": 1.2,  "drag": 0.9,  "avel": 0.7,  "mass": 1.0, "name": "HAMMER"},
-	# Sickle (砍): mid weight — fast, long, wins on sustained speed; modest knockback.
-	Type.SICKLE: {"dmg": 1.05, "knock": 0.8,  "reach": 1.2,  "head": 0.85, "stiff": 1.25, "damp": 0.85, "drag": 1.3,  "avel": 1.3,  "mass": 0.5, "name": "SICKLE"},
-	# Staff/spear (槍): a feather — ~2x the rotation agility, long growing reach, almost no
-	# knockback. The shaft barely hurts; only the sharp TIP deals big damage, so you must land it.
-	Type.STAFF:  {"dmg": 2.4,  "knock": 0.45, "reach": 2.0,  "head": 0.5,  "stiff": 1.15, "damp": 0.85, "drag": 1.45, "avel": 2.0,  "mass": 0.1, "name": "STAFF"},
+	# The hammer head: heaviest — huge damage + knockback, slow to whip. Wins straight rams.
+	Type.HAMMERHEAD: {"dmg": 1.45, "knock": 2.0,  "reach": 0.8,  "head": 1.3,  "stiff": 1.1,  "damp": 1.25, "drag": 0.9,  "avel": 0.75, "mass": 1.0,  "boost": 0.95, "anchor": 1, "name": "HAMMERHEAD"},
+	# The saw: long and toothed — every pass opens a BLEED. Wins drive-bys and grazes.
+	Type.SAWFISH:    {"dmg": 1.1,  "knock": 0.7,  "reach": 1.35, "head": 0.75, "stiff": 1.25, "damp": 0.9,  "drag": 1.25, "avel": 1.35, "mass": 0.5,  "boost": 1.0,  "anchor": 1, "name": "SAWFISH"},
+	# The bill: a rigid lance — almost weightless, only the TIP hurts, but it hurts.
+	# Fastest boost in the ocean: the jouster.
+	Type.SWORDFISH:  {"dmg": 2.3,  "knock": 0.5,  "reach": 1.7,  "head": 0.5,  "stiff": 1.7,  "damp": 1.15, "drag": 1.3,  "avel": 1.6,  "mass": 0.25, "boost": 1.3,  "anchor": 1, "name": "SWORDFISH"},
+	# The tail whip, anchored BEHIND: loose, fast, cracked by sharp turns. VENOM slows prey.
+	Type.STINGRAY:   {"dmg": 1.55, "knock": 0.95, "reach": 1.35, "head": 0.6,  "stiff": 0.5,  "damp": 0.5,  "drag": 1.6,  "avel": 1.8,  "mass": 0.4,  "boost": 1.05, "anchor": -1, "name": "STINGRAY"},
+	# The tentacle club: balanced and sloshy — the all-rounder (and it inks when it jets).
+	Type.SQUID:      {"dmg": 1.0,  "knock": 1.0,  "reach": 1.05, "head": 0.95, "stiff": 1.0,  "damp": 1.0,  "drag": 1.0,  "avel": 1.2,  "mass": 0.7,  "boost": 1.0,  "anchor": 1, "name": "SQUID"},
 }
 
-# Shared base feel (before per-type + per-mass scaling).
+# Shared base feel (before per-species + per-mass scaling).
 const FOLLOW_STIFFNESS := 12.0
 const REST_DAMPING := 4.6
 const MAX_AVEL := 26.0
-const DRAG_GAIN := 5.0
-const PASSIVE_DRAG := 0.4      ## fraction of aim-drag applied even when not committed-swinging (point-and-flick still whips)
+const DRAG_GAIN := 5.0         ## how strongly TURNING (facing drag) whips the part
 const INERTIA_GAIN := 1.0
 const HEAD_RADIUS_BASE := 22.0
-const SLAM_WINDUP := 0.32
-const SLAM_RECOVER := 0.42
-const SPIN_RATE := 16.0
-const SPIN_ACCEL := 40.0
-const SPIN_MIN_STAMINA := 30.0
-const SPIN_HIT_INTERVAL := 0.45
-const SPIN_SPEED_REF := 560.0  ## the whirl reads as this head speed for damage
-const PICKUP_FLING := 2.4      ## impulse multiplier when the head bats a loose gem
-const CLASH_SPEED := 620.0     ## combined head speed above which two swung stones CLASH and bounce apart
-const REDIRECT_COST := 2.2     ## stamina multiplier when the whip fights the head's current spin (redirecting is hard work)
+const PICKUP_FLING := 2.4      ## impulse multiplier when the part bats a loose morsel
+const CLASH_SPEED := 620.0     ## combined part speed above which two weapons CLASH and bounce apart
 
-var type: int = Type.STONE
+var type: int = Type.HAMMERHEAD
 var state: int = State.IDLE
-var aim_angle := 0.0           ## smoothed facing, for the owner's facing dot
 
 var _target_aim := 0.0
 var _prev_target := 0.0
-var _aim_avel := 0.0           ## how fast the aim is being dragged around the owner (signed)
-var _angle := 0.0             ## world angle of the head around the owner (the pendulum)
-var _avel := 0.0             ## angular velocity of the head (rad/s)
+var _aim_avel := 0.0           ## how fast the facing is turning (signed) — the whip input
+var _angle := 0.0             ## world angle of the part around the owner (the pendulum)
+var _avel := 0.0             ## angular velocity of the part (rad/s)
 var _head_dist := 0.0
-var _lift := 0.0             ## 0..1 raised-overhead amount (slam telegraph)
+var _lift := 0.0             ## 0..1 raised amount under speed (visual stretch)
 var _state_time := 0.0
-var _slam_struck := false
-var _swinging := false
 var _head_world := Vector2.ZERO
-var _head_speed := 0.0        ## measured head speed (px/s) — the swing's "relative_speed"
+var _head_speed := 0.0        ## measured part speed (px/s) — the hit's "relative_speed"
 var _prev_owner_vel := Vector2.ZERO
 var _hit_ids := {}
 var _hit_clear := 0.0
-var _spin_clear := 0.0
 var _clash_cd := 0.0
 var _trail: Array = []
 var _overlap_weapons: Array = []   ## other weapons' hitboxes touching ours (event-driven, usually empty)
 var _tracking_pickups := true
 var _draw_key := -999              ## quantized visual state — redraw only when it changes
-var _slam_flash := 0.0
-var _slam_point := Vector2.ZERO
 
 # Cached derived (recomputed on mass change).
 var _head_radius := HEAD_RADIUS_BASE
@@ -92,15 +83,15 @@ var _owner: Fighter
 var _hitbox: Area2D
 var _hitshape: CollisionShape2D
 var _circle: CircleShape2D
-var _solid: AnimatableBody2D       ## the physical head — shoves other fighters so nothing overlaps
+var _solid: AnimatableBody2D       ## the physical part — shoves other fish so nothing overlaps
 var _solid_shape: CollisionShape2D
 var _solid_circle: CircleShape2D
 
 func _ready() -> void:
 	_owner = get_parent() as Fighter
 	_hitbox = Area2D.new()
-	# The head lives on its OWN collision layer and is monitorable, so other weapons'
-	# hitboxes can detect it — that's what makes two swung stones physically CLASH.
+	# The part lives on its OWN collision layer and is monitorable, so other weapons'
+	# hitboxes can detect it — that's what makes a saw and a bill physically CLASH.
 	_hitbox.collision_layer = Game.L_WEAPON
 	_hitbox.collision_mask = Game.L_FIGHTER | Game.L_PICKUP | Game.L_WEAPON
 	_hitbox.monitoring = true
@@ -112,12 +103,12 @@ func _ready() -> void:
 	_hitbox.add_child(_hitshape)
 	add_child(_hitbox)
 	# Weapon-vs-weapon contact is EVENT-driven: the physics server tells us when another
-	# head starts/stops touching ours, so the per-frame clash check is a no-op unless a
+	# part starts/stops touching ours, so the per-frame clash check is a no-op unless a
 	# clash is actually possible (polling get_overlapping_areas() allocated every frame).
 	_hitbox.area_entered.connect(_on_weapon_area_entered)
 	_hitbox.area_exited.connect(_on_weapon_area_exited)
-	# The SOLID head: a kinematic body driven to the head position each frame. It physically
-	# pushes any OTHER fighter (and is pushed against by them) so nothing overlaps — but a
+	# The SOLID part: a kinematic body driven to the part position each frame. It physically
+	# pushes any OTHER fish (and is pushed against by them) so nothing overlaps — but a
 	# collision exception with our own wielder means our own weapon never blocks us.
 	_solid = AnimatableBody2D.new()
 	_solid.top_level = true
@@ -139,12 +130,20 @@ func _ready() -> void:
 func set_type(t: int) -> void:
 	type = t
 	refresh_scale(_owner.mass if _owner else 1.0)
+	if _owner:
+		_owner.queue_redraw()   # the body silhouette is species-drawn too
 
 func type_name() -> String:
 	return TYPES[type]["name"]
 
-## Recompute head size, reach and swing feel for the owner's current mass. Bigger =
-## a larger head with more reach, but a lower angular-speed cap and a softer spring
+func boost_mult() -> float:
+	return float(TYPES[type]["boost"])
+
+func is_rear_anchored() -> bool:
+	return int(TYPES[type]["anchor"]) < 0
+
+## Recompute part size, reach and whip feel for the owner's current mass. Bigger =
+## a larger part with more reach, but a lower angular-speed cap and a softer spring
 ## (laggier) — the weight-vs-mobility trade the whole game turns on.
 func refresh_scale(mass: float) -> void:
 	var t: Dictionary = TYPES[type]
@@ -162,42 +161,15 @@ func refresh_scale(mass: float) -> void:
 	if _solid_circle:
 		_solid_circle.radius = _head_radius * 0.95
 
-# --- control API (shared by Player and Bot) ---------------------------------------
+# --- control API (Fighter feeds the facing; species does the rest) -----------------
 
+## The fish's facing. Front parts rest ahead, the ray's tail rests BEHIND — so the
+## same "turn to whip" physics makes a bill joust and a tail crack.
 func aim_at(angle: float) -> void:
-	_target_aim = angle
+	_target_aim = angle + (PI if is_rear_anchored() else 0.0)
 
-func set_swinging(on: bool) -> void:
-	_swinging = on
-
-func do_slam() -> void:
-	if state == State.SLAM:
-		return
-	# Cost grows with weight but is capped below the pool, so a heavy fighter can always slam
-	# from a near-full bar (a raw sqrt(mass) cost exceeded 100 stamina past mass ~11).
-	var slam_cost := minf(Game.SLAM_STAMINA * pow(maxf(_owner.mass, 0.001), 0.35) * (0.4 + 0.6 * float(TYPES[type]["mass"])), Game.STAMINA_MAX * 0.8)
-	if not _owner.try_spend_stamina(slam_cost):
-		_owner.on_too_tired()
-		return
-	_slam_struck = false
-	_change_state(State.SLAM)
-
-## Hold-to-whirl. Called every frame with the key's held state; idempotent.
-func set_spin(on: bool) -> void:
-	if on:
-		if state == State.IDLE or state == State.SWING:
-			if _owner.stamina >= SPIN_MIN_STAMINA:
-				_hit_ids.clear()
-				_spin_clear = 0.0
-				_change_state(State.SPIN)
-			else:
-				_owner.on_too_tired()
-	else:
-		if state == State.SPIN:
-			_change_state(State.IDLE)
-
-## Enable/disable the physical head (off while the wielder is dead so a corpse's stale
-## stone can't block the living).
+## Enable/disable the physical part (off while the wielder is dead so a corpse's stale
+## saw can't block the living).
 func set_solid_active(on: bool) -> void:
 	if _solid_shape:
 		_solid_shape.set_deferred("disabled", not on)
@@ -208,72 +180,61 @@ func head_speed() -> float:
 func reach() -> float:
 	return _arm_length + _head_radius
 
-## Settle the head back to a clean idle — used when a fighter (re)spawns. Critically,
-## it re-seeds the head-position trackers to the CURRENT (post-teleport) position so the
-## first frame after a respawn measures ~0 head speed, not a teleport-distance spike that
-## would land a free full-power hit.
+## Settle the part back to a clean idle — used when a fish (re)spawns. Critically,
+## it re-seeds the position trackers to the CURRENT (post-teleport) position so the
+## first frame after a respawn measures ~0 part speed, not a teleport-distance spike
+## that would land a free full-power hit.
 func reset() -> void:
 	state = State.IDLE
 	_avel = 0.0
+	_angle = _target_aim
 	_head_dist = _arm_length
 	_hit_ids.clear()
 	_trail.clear()
 	_overlap_weapons.clear()   # a respawn teleport invalidates every tracked overlap
-	_swinging = false
 	_head_speed = 0.0
 	_head_world = _head_at()
 	_prev_target = _target_aim
 	_prev_owner_vel = _owner.velocity if _owner else Vector2.ZERO
 
-func is_busy() -> bool:
-	return state == State.SLAM
-
 # --- per-frame --------------------------------------------------------------------
 
 func _physics_process(delta: float) -> void:
-	aim_angle = lerp_angle(aim_angle, _target_aim, clampf(10.0 * delta, 0.0, 1.0))
 	_state_time += delta
 
-	# Aim drag speed (signed) — the "how fast are you whipping the head around" input.
+	# Facing turn speed (signed) — the "how fast are you whipping the part around" input.
 	_aim_avel = wrapf(_target_aim - _prev_target, -PI, PI) / maxf(delta, 0.0001)
 	_prev_target = _target_aim
 
-	# Owner acceleration this frame — what sloshes the heavy head around.
+	# Owner acceleration this frame — what sloshes the heavy part around (a boost surge
+	# snaps the tail straight back; a hard stop flings it forward).
 	var ov: Vector2 = _owner.velocity if _owner else Vector2.ZERO
 	var accel: Vector2 = (ov - _prev_owner_vel) / maxf(delta, 0.0001)
 	accel = accel.limit_length(3000.0)
 	_prev_owner_vel = ov
 
-	match state:
-		State.IDLE, State.SWING:
-			_update_pendulum(delta, accel)
-			_apply_swing_hits(delta)
-			var fast := _head_speed > Game.HIT_SPEED_MIN
-			if fast and state == State.IDLE:
-				_change_state(State.SWING)
-				# The whip-up whoosh doubles as a positional danger telegraph — you HEAR
-				# a head come up to speed behind you before you see it.
-				Sfx.play(&"whoosh", _head_world, -6.0, Game.rng().randf_range(0.88, 1.15))
-			elif not fast and state == State.SWING:
-				_change_state(State.IDLE)
-		State.SLAM:
-			_process_slam(delta)
-		State.SPIN:
-			_process_spin(delta)
+	_update_pendulum(delta, accel)
+	_apply_hits(delta)
+	var fast := _head_speed > Game.HIT_SPEED_MIN
+	if fast and state == State.IDLE:
+		_change_state(State.SWING)
+		# The whip-up whoosh doubles as a positional danger telegraph — you HEAR
+		# a part come up to speed behind you before you see it.
+		Sfx.play(&"whoosh", _head_world, -6.0, Game.rng().randf_range(0.88, 1.15))
+	elif not fast and state == State.SWING:
+		_change_state(State.IDLE)
 
 	rotation = _angle
 	if _hitbox:
 		_hitbox.position = Vector2(_head_dist, 0.0)
 	if _solid:
-		_solid.global_position = _head_at()   # drive the physical head (top_level) to the head world pos
+		_solid.global_position = _head_at()   # drive the physical part (top_level) to the world pos
 	_update_trail(delta)
 	_check_clash(delta)
-	if _slam_flash > 0.0:
-		_slam_flash = maxf(0.0, _slam_flash - delta)
 
-	# Idle heads stop pair-tracking gems (the physics server otherwise maintains overlap
-	# pairs for every gem each of 14 sweeping heads drifts past) — a slow head never
-	# hits or flings anything anyway, so nothing observable changes.
+	# Idle parts stop pair-tracking morsels (the physics server otherwise maintains overlap
+	# pairs for every morsel each of 14 drifting parts passes) — a slow part never
+	# wounds or flings anything anyway, so nothing observable changes.
 	var want_pickups := state != State.IDLE or _head_speed >= Game.HIT_SPEED_MIN * 0.7
 	if want_pickups != _tracking_pickups:
 		_tracking_pickups = want_pickups
@@ -281,18 +242,18 @@ func _physics_process(delta: float) -> void:
 			Game.L_FIGHTER | Game.L_WEAPON | (Game.L_PICKUP if want_pickups else 0))
 
 	# Redraw only when the QUANTIZED visual state changes — rotation is a transform, not
-	# a redraw, so a resting or steadily-carried head costs zero canvas re-recording.
+	# a redraw, so a resting or steadily-carried part costs zero canvas re-recording.
 	var key := state
 	key = key * 16 + int(clampf(_head_speed / 1400.0, 0.0, 1.0) * 12.0)
 	key = key * 32 + int(_lift * 24.0)
 	key = key * 4096 + int(_head_dist * 0.25)
-	if key != _draw_key or _trail.size() > 0 or _slam_flash > 0.0 or state == State.SLAM:
+	if key != _draw_key or _trail.size() > 0:
 		_draw_key = key
 		queue_redraw()
 
-## Two swung stones colliding: if their combined head speed is high enough, both bounce
-## off each other (reverse spin), the wielders are shoved apart, and a spark pops. Uses the
-## weapon's own L_WEAPON collision layer via get_overlapping_areas().
+## Two weapon parts colliding: if their combined speed is high enough, both bounce
+## off each other (reverse whip), the fish are shoved apart, and a spark pops. Uses the
+## weapon's own L_WEAPON collision layer via the tracked overlaps.
 func _check_clash(delta: float) -> void:
 	_clash_cd -= delta
 	if _overlap_weapons.is_empty() or _clash_cd > 0.0:
@@ -307,9 +268,10 @@ func _check_clash(delta: float) -> void:
 			continue
 		if _head_speed + ow._head_speed < CLASH_SPEED:
 			continue
-		# Two pendulum heads collide — momentum transfer by effective mass (weapon mass × wielder
-		# size). The LIGHTER weapon bounces back harder (reverses more angular velocity) and its
-		# wielder is shoved further; a heavy hammer barely flinches when a light staff hits it.
+		# Two pendulum parts collide — momentum transfer by effective mass (part weight ×
+		# wielder size). The LIGHTER part bounces back harder (reverses more angular
+		# velocity) and its wielder is shoved further; a hammer head barely flinches when
+		# a feather bill glances off it.
 		var my_m := _effective_mass()
 		var ow_m := ow._effective_mass()
 		var my_share := ow_m / (my_m + ow_m + 0.001)
@@ -325,9 +287,9 @@ func _check_clash(delta: float) -> void:
 				var mid := (_head_at() + ow._head_at()) * 0.5
 				Sfx.play(&"clash", mid, -2.0, Game.rng().randf_range(0.9, 1.12))
 				if Game.fx:
-					Game.fx.burst(mid, Color(1.0, 0.95, 0.8), 10, 420.0, 2.5)
+					Game.fx.burst(mid, Color(0.85, 0.97, 1.0), 10, 420.0, 2.5)
 				if _owner.is_player or ow._owner.is_player:
-					Game.popup("CLASH!", mid + Vector2(0, -18), Color(1.0, 0.95, 0.7), 1.15)
+					Game.popup("CLASH!", mid + Vector2(0, -18), Color(0.85, 0.97, 1.0), 1.15)
 		break
 
 func _on_weapon_area_entered(a: Area2D) -> void:
@@ -338,7 +300,7 @@ func _on_weapon_area_entered(a: Area2D) -> void:
 func _on_weapon_area_exited(a: Area2D) -> void:
 	_overlap_weapons.erase(a)
 
-## The head's effective mass = weapon type weight × wielder size (bigger fighter = heavier head).
+## The part's effective mass = species part weight × wielder size (bigger fish = heavier part).
 func _effective_mass() -> float:
 	var wm: float = float(TYPES[type]["mass"])
 	return wm * sqrt(maxf(_owner.mass, 0.001)) if _owner else wm
@@ -346,116 +308,22 @@ func _effective_mass() -> float:
 func _update_pendulum(delta: float, accel: Vector2) -> void:
 	var diff := wrapf(_target_aim - _angle, -PI, PI)
 	var torque := _stiffness * diff - _damping * _avel
-	# The owner's movement sloshes the heavy head (pendulum pseudo-force).
+	# The owner's movement sloshes the heavy part (pendulum pseudo-force).
 	torque += (accel.x * sin(_angle) - accel.y * cos(_angle)) / maxf(_arm_length, 1.0) * INERTIA_GAIN
-	# The aim-drag whip: rotating where you point spins the head that way, building
-	# real speed. A committed swing (button held) applies it in full and costs stamina;
-	# otherwise a weaker passive whip still lets a flick land.
+	# The turn-whip: rotating your body drags the part around, building real speed.
+	# It's your own muscle — no stamina cost (stamina is boost fuel, nothing else).
 	if absf(_aim_avel) > 0.2:
-		# The whip torque you apply. Stamina spent = that force × head weight × how much you're
-		# fighting the head's momentum (redirecting costs more than adding to the spin) — i.e.
-		# real WORK, not a flat cost for holding the button.
-		var applied := _aim_avel * _drag
-		if _swinging:
-			var opposing := REDIRECT_COST if (not is_zero_approx(_avel) and signf(applied) != signf(_avel)) else 1.0
-			var wmass := 0.3 + float(TYPES[type]["mass"])   # heavy weapon = more effort; a light staff whips cheaply
-			var cost := absf(applied) * sqrt(maxf(_owner.mass, 0.001)) * wmass * Game.SWING_STAMINA_PER_TORQUE * opposing * delta
-			if _owner.try_spend_stamina(cost):
-				torque += applied
-			else:
-				torque += applied * PASSIVE_DRAG   # too tired to commit — only the weak passive whip
-		else:
-			torque += applied * PASSIVE_DRAG
+		torque += _aim_avel * _drag
 	_avel = clampf(_avel + torque * delta, -_max_avel, _max_avel)
 	_angle = wrapf(_angle + _avel * delta, -PI, PI)
-	# A little stretch + lift under speed sells the whip.
+	# A little stretch under speed sells the whip.
 	var target_dist := _arm_length + clampf(absf(_avel) * 0.7, 0.0, 16.0)
 	_head_dist = lerpf(_head_dist, target_dist, clampf(10.0 * delta, 0.0, 1.0))
 	_lift = lerpf(_lift, clampf(_head_speed / 1800.0, 0.0, 0.4), clampf(8.0 * delta, 0.0, 1.0))
 
-func _process_slam(delta: float) -> void:
-	_angle = lerp_angle(_angle, _target_aim, clampf(14.0 * delta, 0.0, 1.0))
-	_avel = 0.0
-	if not _slam_struck:
-		var t := clampf(_state_time / SLAM_WINDUP, 0.0, 1.0)
-		_head_dist = lerpf(_arm_length, _arm_length * 0.55, t)   # rear back
-		_lift = _ease_out(t)
-		if t >= 1.0:
-			_slam_struck = true
-			_state_time = 0.0
-			_do_slam_impact()
-	else:
-		var t := clampf(_state_time / SLAM_RECOVER, 0.0, 1.0)
-		_head_dist = lerpf(_arm_length * 1.35, _arm_length, _ease_out(t))
-		_lift = lerpf(_lift, 0.0, clampf(9.0 * delta, 0.0, 1.0))
-		if t >= 1.0:
-			_avel = 0.0
-			_change_state(State.IDLE)
-
-func _do_slam_impact() -> void:
-	_head_dist = _arm_length * 1.35
-	var point := _owner.global_position + Vector2(_arm_length * 1.35, 0.0).rotated(_target_aim)
-	var t: Dictionary = TYPES[type]
-	var radius := _arm_length * 1.5 + _head_radius
-	var mass_factor := sqrt(maxf(_owner.mass, 0.001))
-	var dmg := Game.BASE_DMG * float(t["dmg"]) * mass_factor * 1.7
-	# The detonation is carried by the head's WEIGHT — a feather staff can't slam like a
-	# hammer, whatever its tip damage says (otherwise staff slams are degenerate: cheapest
-	# stamina AND the highest dmg multiplier).
-	dmg *= 0.55 + 0.45 * float(t["mass"])
-	var knock := Game.BASE_KNOCK * float(t["knock"]) * 1.8
-	var hit_any := false
-	# Radial burst — everything in range is damaged + launched outward from the point.
-	for f in get_tree().get_nodes_in_group("fighter"):
-		if f == _owner or not is_instance_valid(f):
-			continue
-		var d: float = f.global_position.distance_to(point)
-		if d > radius + f.mass * 4.0:
-			continue
-		var dir: Vector2 = (f.global_position - point).normalized()
-		if dir == Vector2.ZERO:
-			dir = Vector2.RIGHT.rotated(_target_aim)
-		var falloff := 1.0 - clampf(d / maxf(radius, 1.0), 0.0, 1.0) * 0.5
-		hit_any = true
-		if f.take_damage(dmg * falloff, dir, knock * falloff):
-			_owner.on_scored_kill(f)
-	for p in get_tree().get_nodes_in_group("pickup"):
-		if not is_instance_valid(p):
-			continue
-		var pd: float = p.global_position.distance_to(point)
-		if pd <= radius * 1.4 and p.has_method("fling"):
-			var pdir: Vector2 = (p.global_position - point).normalized()
-			p.fling(pdir * (radius - pd) * 3.0)
-	_slam_point = point
-	_slam_flash = 0.1
-	Sfx.play(&"boom", point, 0.0, Game.rng().randf_range(0.92, 1.1))
-	if Game.fx:
-		Game.fx.burst(point, Color(1.0, 0.6, 0.25), 18, 520.0, 3.5)
-	if _owner.is_player:
-		if hit_any:
-			Game.hitstop(0.15, 0.05)   # a connecting slam bites for a beat
-		Game.popup("SMASH!", point + Vector2(0, -30), Color(1.0, 0.82, 0.4), 1.3)
-	_owner.on_hit_feedback(26.0, Vector2.RIGHT.rotated(_target_aim), true)
-
-func _process_spin(delta: float) -> void:
-	if not _owner.try_spend_stamina(Game.SPIN_STAMINA_RATE * pow(maxf(_owner.mass, 0.001), 0.35) * (0.4 + 0.6 * float(TYPES[type]["mass"])) * delta):
-		_owner.on_too_tired()
-		_change_state(State.IDLE)
-		return
-	var target := SPIN_RATE * (1.0 if _avel >= 0.0 else -1.0)
-	_avel = move_toward(_avel, target, SPIN_ACCEL * delta)
-	_angle = wrapf(_angle + _avel * delta, -PI, PI)
-	_head_dist = lerpf(_head_dist, _arm_length + 10.0, clampf(8.0 * delta, 0.0, 1.0))
-	_lift = lerpf(_lift, 0.24, clampf(6.0 * delta, 0.0, 1.0))
-	_apply_spin_hits()
-	_spin_clear -= delta
-	if _spin_clear <= 0.0:
-		_hit_ids.clear()
-		_spin_clear = SPIN_HIT_INTERVAL
-
 # --- hit resolution ---------------------------------------------------------------
 
-func _apply_swing_hits(delta: float) -> void:
+func _apply_hits(delta: float) -> void:
 	_hit_clear -= delta
 	if _hit_clear <= 0.0:
 		_hit_ids.clear()
@@ -470,28 +338,13 @@ func _apply_swing_hits(delta: float) -> void:
 			continue
 		if body is Fighter:
 			_hit_ids[id] = true
-			_score_hit(body, _head_speed, false)
+			_score_hit(body, _head_speed)
 		elif body.has_method("fling"):
 			_hit_ids[id] = true
 			var dir: Vector2 = (body.global_position - _owner.global_position).normalized()
 			body.fling(dir * _head_speed * PICKUP_FLING * 0.1)
 
-func _apply_spin_hits() -> void:
-	for body in _hitbox.get_overlapping_bodies():
-		if body == _owner or not is_instance_valid(body):
-			continue
-		var id: int = body.get_instance_id()
-		if _hit_ids.has(id):
-			continue
-		if body is Fighter:
-			_hit_ids[id] = true
-			_score_hit(body, maxf(_head_speed, SPIN_SPEED_REF), true)
-		elif body.has_method("fling"):
-			_hit_ids[id] = true
-			var dir: Vector2 = (body.global_position - _owner.global_position).normalized()
-			body.fling(dir * SPIN_SPEED_REF * PICKUP_FLING * 0.1)
-
-func _score_hit(victim: Fighter, speed: float, is_spin: bool) -> void:
+func _score_hit(victim: Fighter, speed: float) -> void:
 	var t: Dictionary = TYPES[type]
 	var mass_factor := sqrt(maxf(_owner.mass, 0.001))
 	var speed_factor := clampf(speed / Game.REF_HEAD_SPEED, 0.35, 2.4)
@@ -501,29 +354,41 @@ func _score_hit(victim: Fighter, speed: float, is_spin: bool) -> void:
 	if dir == Vector2.ZERO:
 		dir = Vector2.RIGHT.rotated(_angle)
 	var show_pop: bool = _owner.is_player or victim.is_player   # skip bot-vs-bot popups (churn + clutter)
-	# WALL-PIN: if the victim can't fly back (a wall behind them), the knockback that would
-	# have become motion becomes DAMAGE instead — so hammering a foe into a wall hurts far more
-	# than knocking them into open space. High-knockback weapons benefit most.
+	# REEF-PIN: if the victim can't fly back (the reef wall behind them), the knockback that
+	# would have become motion becomes DAMAGE instead — so hammering a foe into the reef hurts
+	# far more than knocking them into open water. High-knockback species benefit most.
 	if victim.is_pinned(dir):
 		dmg += knock * Game.PIN_DAMAGE
 		if show_pop:
 			Game.popup("PINNED!", victim.global_position + Vector2(0, -victim.body_radius - 16.0), Color(1.0, 0.55, 0.3), 1.1)
 	var died := victim.take_damage(dmg, dir, knock)
-	# Impact feedback scales with how hard the hit landed: a graze taps, a full whip cracks.
+	# The two wounds — the ONLY status effects, both species-signature and readable:
+	# the saw opens a bleed, the ray's barb envenoms. Applied even on the killing blow
+	# (harmless then), attacker remembered so a wound-death still credits the hunter.
+	if not died:
+		match type:
+			Type.SAWFISH:
+				victim.apply_bleed(dmg * 0.22, _owner)
+				if show_pop:
+					Game.popup("BLEED!", victim.global_position + Vector2(0, -victim.body_radius - 28.0), Color(1.0, 0.35, 0.3), 0.95)
+			Type.STINGRAY:
+				victim.apply_venom(_owner)
+				if show_pop:
+					Game.popup("VENOM!", victim.global_position + Vector2(0, -victim.body_radius - 28.0), Color(0.6, 1.0, 0.45), 0.95)
+	# Impact feedback scales with how hard the hit landed: a graze taps, a full ram cracks.
 	var speed_n := clampf((speed_factor - 0.35) / 2.05, 0.0, 1.0)
 	Sfx.play(&"thud", victim.global_position, lerpf(-9.0, 0.0, speed_n), lerpf(0.75, 1.25, speed_n))
 	if Game.fx:
 		Game.fx.burst(victim.global_position, Color(1.0, 0.85, 0.5), 4 + int(speed_factor * 4.0), 260.0 * speed_factor)
-	var shake := clampf(speed_factor * (18.0 if is_spin else 26.0), 6.0, 44.0)
-	_owner.on_hit_feedback(shake * (0.5 if is_spin else 1.0), dir, false)
-	# A scored hit commits the wielder's mass — a capped forward lunge along the blow.
-	if not is_spin:
-		var nudge := clampf(speed * 0.05, 0.0, 160.0)
-		_owner.lunge(dir * nudge)
+	var shake := clampf(speed_factor * 26.0, 6.0, 44.0)
+	_owner.on_hit_feedback(shake, dir, false)
+	# A scored hit commits the attacker's mass — a capped forward lunge along the blow.
+	var nudge := clampf(speed * 0.05, 0.0, 160.0)
+	_owner.lunge(dir * nudge)
 	if died:
 		_owner.on_scored_kill(victim)
-	elif not is_spin and show_pop:
-		Game.popup("BONK!", victim.global_position + Vector2(0, -victim.body_radius - 12.0), Color(1, 0.95, 0.7), 0.9)
+	elif show_pop:
+		Game.popup("WHAM!", victim.global_position + Vector2(0, -victim.body_radius - 12.0), Color(1, 0.95, 0.7), 0.9)
 
 func _head_at() -> Vector2:
 	return global_position + Vector2(_head_dist, 0.0).rotated(rotation)
@@ -532,7 +397,7 @@ func _update_trail(delta: float) -> void:
 	var head := _head_at()
 	_head_speed = minf(head.distance_to(_head_world) / maxf(delta, 0.0001), 3600.0)
 	_head_world = head
-	if _head_speed > Game.HIT_SPEED_MIN or state == State.SPIN or state == State.SLAM:
+	if _head_speed > Game.HIT_SPEED_MIN:
 		_trail.push_back({"pos": head, "age": 0.0})
 	for p in _trail:
 		p.age += delta
@@ -543,97 +408,123 @@ func _change_state(s: int) -> void:
 	state = s
 	_state_time = 0.0
 
-func _ease_out(t: float) -> float:
-	return 1.0 - pow(1.0 - t, 3.0)
-
-# --- drawing (all placeholder art, in code) ---------------------------------------
+# --- drawing (all placeholder art, in code; +X points along the arm) ----------------
 
 func _draw() -> void:
-	# SLAM telegraph — the impact ring is drawn on the ground during the windup, so a
-	# slam (yours or a bot's) is always a READABLE dodge test: counterable-defenses
-	# pillar. It fills as the windup commits, then flashes white at detonation.
-	if state == State.SLAM and not _slam_struck:
-		var wt := clampf(_state_time / SLAM_WINDUP, 0.0, 1.0)
-		var ip := to_local(_owner.global_position + Vector2(_arm_length * 1.35, 0.0).rotated(_target_aim))
-		var rad := _arm_length * 1.5 + _head_radius
-		draw_arc(ip, rad, 0.0, TAU, 40, Color(1.0, 0.35, 0.15, 0.15 + 0.35 * wt), 3.0 + 3.0 * wt)
-		draw_circle(ip, rad * wt, Color(1.0, 0.4, 0.15, 0.10))
-	if _slam_flash > 0.0:
-		draw_circle(to_local(_slam_point), (_arm_length * 1.5 + _head_radius) * 1.05, Color(1, 1, 1, _slam_flash * 3.5))
 	_draw_trail()
 	var head := Vector2(_head_dist, 0.0)
 	var r := _head_radius * (1.0 + 0.4 * _lift)
 	var speed_t := clampf(_head_speed / 1400.0, 0.0, 1.0)
 	var base_col: Color = _owner.color if _owner else Color("cfd0d8")
 
-	# Overhead shadow while lifted.
-	if _lift > 0.01:
-		draw_circle(head - Vector2(16.0 * _lift, 0.0), r * 0.9, Color(0, 0, 0, 0.26 * _lift))
-
-	# The haft: a grip line from the wielder out to the head.
-	draw_line(Vector2(6.0, 0.0), head, Color(0.32, 0.25, 0.19), 7.0)
-	draw_line(Vector2(6.0, 0.0), head, Color(0.55, 0.44, 0.32), 3.0)
-
-	if state == State.SPIN:
-		draw_arc(Vector2.ZERO, _head_dist, 0.0, TAU, 40, Color(1.0, 0.7, 0.3, 0.3), 4.0)
-
 	match type:
-		Type.HAMMER:
-			_draw_hammer(head, r, speed_t)
-		Type.SICKLE:
-			_draw_sickle(head, r, speed_t)
-		Type.STAFF:
-			_draw_staff(head, r, speed_t)
+		Type.HAMMERHEAD:
+			_draw_hammerhead(head, r, speed_t, base_col)
+		Type.SAWFISH:
+			_draw_saw(head, r, speed_t, base_col)
+		Type.SWORDFISH:
+			_draw_bill(head, r, speed_t, base_col)
+		Type.STINGRAY:
+			_draw_tail(head, r, speed_t, base_col)
 		_:
-			_draw_stone(head, r, speed_t, base_col)
+			_draw_tentacle(head, r, speed_t, base_col)
 
-	# A heat ring when the head is really moving — reads momentum at a glance.
-	if speed_t > 0.25 and (state == State.SWING or state == State.SPIN):
-		draw_arc(head, r + 6.0, 0.0, TAU, 32, Color(1.0, 0.7, 0.25, speed_t * 0.9), 3.0)
+	# A wake ring when the part is really moving — reads momentum at a glance.
+	if speed_t > 0.25 and state == State.SWING:
+		draw_arc(head, r + 6.0, 0.0, TAU, 32, Color(0.7, 0.95, 1.0, speed_t * 0.9), 3.0)
 
-func _draw_stone(head: Vector2, r: float, speed_t: float, base_col: Color) -> void:
-	var stone := Color(0.46, 0.44, 0.5).lerp(Color(1.0, 0.5, 0.2), speed_t * 0.7)
-	draw_circle(head, r, stone)
-	draw_circle(head - Vector2(r * 0.3, r * 0.3), r * 0.42, stone.lightened(0.12))
-	draw_circle(head + Vector2(r * 0.32, r * 0.24), r * 0.24, stone.darkened(0.22))
-	draw_arc(head, r, 0.0, TAU, 28, Color(0.16, 0.15, 0.18), 3.0)
-	# The sword, buried hilt-deep in the stone — the whole joke, drawn.
-	draw_line(head - Vector2(r * 0.2, 0), head + Vector2(r + 12.0, 0), Color(0.85, 0.87, 0.95), 4.0)
-	draw_line(head + Vector2(r * 0.1, -6), head + Vector2(r * 0.1, 6), Color(0.85, 0.8, 0.5), 4.0)
+## Speed-heat tint shared by every part: flesh at rest, hot when it would wound.
+func _part_color(base_col: Color, speed_t: float) -> Color:
+	return base_col.darkened(0.08).lerp(Color(1.0, 0.5, 0.3), speed_t * 0.6)
 
-func _draw_hammer(head: Vector2, r: float, speed_t: float) -> void:
-	var col := Color(0.4, 0.42, 0.48).lerp(Color(1.0, 0.5, 0.2), speed_t * 0.7)
-	var w := r * 1.7
-	var h := r * 1.25
-	var rect := Rect2(head - Vector2(w * 0.5, h * 0.5), Vector2(w, h))
-	draw_rect(rect, col)
-	draw_rect(rect, Color(0.15, 0.14, 0.16), false, 3.0)
-	draw_rect(Rect2(head - Vector2(w * 0.5, h * 0.5), Vector2(w * 0.28, h)), col.darkened(0.2))
+func _draw_hammerhead(head: Vector2, r: float, speed_t: float, base_col: Color) -> void:
+	var col := _part_color(base_col, speed_t)
+	# Thick neck from the body out to the head.
+	draw_line(Vector2(0, 0), head, col.darkened(0.12), r * 0.9)
+	# The wide hammer: a capsule PERPENDICULAR to the arm, eyes at both lobe tips.
+	var half := Vector2(0, r * 1.4)
+	draw_line(head - half, head + half, col, r * 1.1)
+	draw_circle(head - half, r * 0.55, col)
+	draw_circle(head + half, r * 0.55, col)
+	for s in [-1.0, 1.0]:
+		var eye := head + Vector2(r * 0.28, s * r * 1.5)
+		draw_circle(eye, r * 0.2, Color(0.95, 0.95, 0.9))
+		draw_circle(eye + Vector2(r * 0.05, 0), r * 0.1, Color(0.1, 0.1, 0.12))
 
-func _draw_staff(head: Vector2, r: float, speed_t: float) -> void:
-	var col := Color(0.72, 0.74, 0.8).lerp(Color(1.0, 0.6, 0.3), speed_t * 0.7)
-	var tip := head + Vector2(r * 2.2, 0.0)
-	draw_line(head - Vector2(r * 0.6, 0.0), tip, col, 5.0)         # reinforced far end of the pole
-	draw_circle(head, r * 0.7, Color(0.36, 0.3, 0.24))            # collar
-	# spearhead that does the poking
-	draw_colored_polygon(PackedVector2Array([tip, head + Vector2(r * 0.9, -r * 0.7), head + Vector2(r * 0.9, r * 0.7)]), col)
+func _draw_saw(head: Vector2, r: float, speed_t: float, base_col: Color) -> void:
+	var col := _part_color(base_col, speed_t)
+	var blade := Color(0.82, 0.84, 0.8).lerp(Color(1.0, 0.55, 0.35), speed_t * 0.6)
+	var x0 := _head_dist * 0.12
+	var tip := head + Vector2(r * 1.5, 0.0)
+	# The rostrum: a long flat blade...
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(x0, -r * 0.42), Vector2(tip.x, -r * 0.16),
+		Vector2(tip.x + r * 0.5, 0.0),
+		Vector2(tip.x, r * 0.16), Vector2(x0, r * 0.42),
+	]), blade)
+	# ...with TEETH down both edges (the whole point of a sawfish).
+	var n := 7
+	for i in range(n):
+		var t := float(i + 1) / float(n + 1)
+		var x := lerpf(x0, tip.x, t)
+		var w := lerpf(r * 0.42, r * 0.16, t)
+		draw_colored_polygon(PackedVector2Array([
+			Vector2(x - r * 0.14, -w), Vector2(x, -w - r * 0.34), Vector2(x + r * 0.14, -w)]), blade)
+		draw_colored_polygon(PackedVector2Array([
+			Vector2(x - r * 0.14, w), Vector2(x, w + r * 0.34), Vector2(x + r * 0.14, w)]), blade)
+	draw_circle(Vector2(x0, 0), r * 0.5, col)   # the snout root
 
-func _draw_sickle(head: Vector2, r: float, speed_t: float) -> void:
-	var col := Color(0.78, 0.8, 0.88).lerp(Color(1.0, 0.6, 0.3), speed_t * 0.7)
-	# A curved blade sweeping off the haft.
-	var pts := PackedVector2Array()
-	var n := 12
-	for i in range(n + 1):
-		var a := lerpf(-1.2, 1.2, float(i) / float(n))
-		pts.push_back(head + Vector2(cos(a), sin(a)) * r * 1.1)
-	draw_polyline(pts, col, 5.0)
-	draw_circle(head, r * 0.35, Color(0.3, 0.24, 0.18))   # the pivot knob
+func _draw_bill(head: Vector2, r: float, speed_t: float, base_col: Color) -> void:
+	var col := _part_color(base_col, speed_t)
+	var bill := Color(0.75, 0.78, 0.85).lerp(Color(1.0, 0.6, 0.3), speed_t * 0.7)
+	var tip := head + Vector2(r * 2.0, 0.0)
+	# The lance: a long thin taper — the TIP is where the damage lives.
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(_head_dist * 0.1, -r * 0.5), tip, Vector2(_head_dist * 0.1, r * 0.5),
+	]), bill)
+	draw_circle(Vector2(_head_dist * 0.12, 0), r * 0.55, col)   # bill root
+	if speed_t > 0.3:   # the tip glints when it's lethal
+		draw_circle(tip, r * 0.3, Color(1.0, 1.0, 0.9, speed_t))
+
+func _draw_tail(head: Vector2, r: float, speed_t: float, base_col: Color) -> void:
+	var col := _part_color(base_col, speed_t)
+	# The whip: a tapered curve from the body to the barb, sagging against the swing.
+	var sag := clampf(-_avel * 6.0, -r * 1.4, r * 1.4)
+	var x0 := _head_dist * 0.05
+	var prev := Vector2(x0, 0.0)
+	var n := 7
+	for i in range(1, n + 1):
+		var t := float(i) / float(n)
+		var p := Vector2(lerpf(x0, head.x, t), sag * sin(t * PI))
+		draw_line(prev, p, col, lerpf(r * 0.55, r * 0.22, t))
+		prev = p
+	# The venom barb: a pale spike past the tail tip.
+	var barb := Color(0.85, 0.95, 0.75).lerp(Color(0.6, 1.0, 0.4), speed_t)
+	draw_colored_polygon(PackedVector2Array([
+		head + Vector2(r * 1.3, 0), head + Vector2(-r * 0.2, -r * 0.45), head + Vector2(-r * 0.2, r * 0.45),
+	]), barb)
+
+func _draw_tentacle(head: Vector2, r: float, speed_t: float, base_col: Color) -> void:
+	var col := _part_color(base_col, speed_t)
+	# Two trailing side tentacles + the main club arm.
+	for s in [-1.0, 1.0]:
+		var mid := Vector2(head.x * 0.5, s * r * 0.9)
+		draw_line(Vector2(0, s * r * 0.3), mid, col.darkened(0.15), r * 0.3)
+		draw_line(mid, head * 0.82 + Vector2(0, s * r * 0.5), col.darkened(0.15), r * 0.22)
+	draw_line(Vector2.ZERO, head, col, r * 0.42)
+	# The club: a fat pad with suckers.
+	draw_circle(head, r, col)
+	draw_circle(head + Vector2(r * 0.25, 0), r * 0.28, col.lightened(0.25))
+	draw_circle(head + Vector2(-r * 0.25, -r * 0.4), r * 0.2, col.lightened(0.25))
+	draw_circle(head + Vector2(-r * 0.25, r * 0.4), r * 0.2, col.lightened(0.25))
+	draw_arc(head, r, 0.0, TAU, 24, col.darkened(0.3), 2.0)
 
 func _draw_trail() -> void:
 	if _trail.size() < 2:
 		return
+	# A bubble wake, not a fire trail — we're underwater.
 	for i in range(_trail.size() - 1):
 		var a: float = 1.0 - _trail[i].age / 0.2
 		var p0: Vector2 = to_local(_trail[i].pos)
 		var p1: Vector2 = to_local(_trail[i + 1].pos)
-		draw_line(p0, p1, Color(0.95, 0.85, 0.6, clampf(a, 0.0, 1.0) * 0.45), 9.0 * clampf(a, 0.2, 1.0))
+		draw_line(p0, p1, Color(0.8, 0.94, 1.0, clampf(a, 0.0, 1.0) * 0.4), 9.0 * clampf(a, 0.2, 1.0))

@@ -1,9 +1,9 @@
 class_name Terrain
 extends Node2D
-## The battlefield's geography — a real-feeling HEIGHT FIELD, not an abstract force zone.
-## Structure is built in layers, the way real land is: a few big Gaussian MASSIFS lay down
-## mountain ranges and basins (the tectonic macro-shape), fractal (FBM) noise adds rolling
-## relief, and a RIDGED noise layer carves sharp mountain ridges on top.
+## The SEAFLOOR — a real-feeling HEIGHT FIELD, not an abstract force zone.
+## Structure is built in layers, the way real seabed is: a few big Gaussian MASSIFS lay
+## down banks and trenches (the tectonic macro-shape), fractal (FBM) noise adds rolling
+## relief, and a RIDGED noise layer carves sharp reef ridges on top.
 ##
 ## Rendering is BAKED, not drawn live: at load the whole map is rendered once into a small
 ## hillshaded image (elevation palette × slope lighting, sampled 4× finer than the physics
@@ -11,8 +11,9 @@ extends Node2D
 ## textured quad per frame instead of ~1,900 Gouraud polygons, which is what made phones
 ## stutter. Contour lines are precomputed into a single batched draw_multiline.
 ##
-## The slope of the surface is the only "gravity" here: everything drifts DOWNHILL, and
-## the water that collects in the basins is slow to wade through — high ground is power.
+## The slope of the floor is the only "gravity" here: the current pulls everything toward
+## the DEEP, and the bright shoals up top drag at your fins — open water is freedom,
+## sandbanks are where the beached get eaten.
 
 const BASE_AMP := 165.0
 const RIDGE_AMP := 55.0         ## kept small — a hint of ridges, not busy detail
@@ -33,18 +34,18 @@ var _hmax := 1.0
 var _tex: ImageTexture
 var _contours := PackedVector2Array()   ## all contour segments, batched into ONE draw call
 
-# Hypsometric palette, keyed by NORMALIZED elevation t in 0..1 (0 = lowest basin, 1 = highest
-# peak) so the full range of colours is always used and high vs low reads at a glance.
+# Bathymetric palette, keyed by NORMALIZED elevation t in 0..1 (0 = deepest trench,
+# 1 = the dry sandbar) so the full range of colours is always used and deep vs shallow
+# reads at a glance.
 const PALETTE := [
-	[0.0, Color(0.10, 0.20, 0.42)],    # deep water
-	[0.16, Color(0.15, 0.31, 0.54)],   # water
-	[0.30, Color(0.20, 0.44, 0.50)],   # coast / shallows
-	[0.42, Color(0.22, 0.44, 0.26)],   # lowland green
-	[0.56, Color(0.42, 0.48, 0.24)],   # grass / foothills
-	[0.68, Color(0.44, 0.34, 0.21)],   # hill brown
-	[0.80, Color(0.45, 0.41, 0.40)],   # rock
-	[0.90, Color(0.60, 0.58, 0.60)],   # high rock
-	[1.0, Color(0.92, 0.94, 0.98)],    # snow
+	[0.0, Color(0.015, 0.04, 0.12)],   # abyssal trench
+	[0.22, Color(0.03, 0.09, 0.24)],   # deep water
+	[0.45, Color(0.06, 0.19, 0.38)],   # open water
+	[0.62, Color(0.09, 0.32, 0.48)],   # shelf
+	[0.74, Color(0.15, 0.50, 0.55)],   # turquoise shallows
+	[0.84, Color(0.45, 0.72, 0.68)],   # bright shoal
+	[0.92, Color(0.83, 0.77, 0.55)],   # wet sand
+	[1.0, Color(0.94, 0.89, 0.68)],    # dry sandbar
 ]
 
 func _ready() -> void:
@@ -88,19 +89,19 @@ func height_at(p: Vector2) -> float:
 	return h
 
 func _physics_process(delta: float) -> void:
-	# Fighters feel the downhill pull AND learn how wet they are — one loop, one grid
-	# lookup each. Gems are deliberately NOT pushed every frame so their RigidBodies can
-	# go to sleep once settled (a constant force would keep them awake = stutter).
+	# Fish feel the down-slope current AND learn how draggy the water is — one loop, one
+	# grid lookup each. Morsels are deliberately NOT pushed every frame so their
+	# RigidBodies can go to sleep once settled (a constant force would keep them awake).
 	for f in get_tree().get_nodes_in_group("fighter"):
 		var fi := f as Fighter
 		if fi == null or fi.is_dead():
 			continue
 		fi.apply_env_force(-_grid_gradient(fi.global_position) * TERRAIN_G, delta)
 		var t := norm_height(fi.global_position)
-		if t < Game.WATER_T:
-			fi.set_wetness(Game.WATER_SLOW)
-		elif t < Game.COAST_T:
-			fi.set_wetness(Game.COAST_SLOW)
+		if t > Game.SAND_T:
+			fi.set_wetness(Game.SAND_SLOW)
+		elif t > Game.SHOAL_T:
+			fi.set_wetness(Game.SHOAL_SLOW)
 		else:
 			fi.set_wetness(1.0)
 
@@ -122,7 +123,7 @@ func height_lookup(p: Vector2) -> float:
 	var h1 := lerpf(_h(gx, gy + 1), _h(gx + 1, gy + 1), tx)
 	return lerpf(h0, h1, ty)
 
-## Normalized elevation 0..1 (0 = deepest basin, 1 = highest peak). Water below WATER_T.
+## Normalized elevation 0..1 (0 = deepest trench, 1 = the sandbar). Shoals above SHOAL_T.
 func norm_height(p: Vector2) -> float:
 	return clampf(inverse_lerp(_hmin, _hmax, height_lookup(p)), 0.0, 1.0)
 
@@ -181,7 +182,7 @@ func _bake_image() -> void:
 		for x in range(iw):
 			hs[y * iw + x] = height_at(_origin + Vector2(x, y) * px)
 	# ...then light it: sun from the north-west, slopes facing it brighten, slopes
-	# facing away darken. Water is flattened toward glassy (no relief under the surface).
+	# facing away darken. The deep is flattened toward glassy (light doesn't reach it).
 	var img := Image.create(iw, ih, false, Image.FORMAT_RGB8)
 	var light := Vector2(-0.7071, -0.7071)
 	for y in range(ih):
@@ -194,7 +195,7 @@ func _bake_image() -> void:
 			var slope := Vector2((xp - xm) / (2.0 * px), (yp - ym) / (2.0 * px))
 			var shade := clampf(1.0 + (slope.x * light.x + slope.y * light.y) * SHADE_GAIN, 0.72, 1.22)
 			var t := clampf(inverse_lerp(_hmin, _hmax, h), 0.0, 1.0)
-			if t < Game.COAST_T:
+			if t < 0.45:
 				shade = lerpf(shade, 1.0, 0.7)
 			var c := _elev_color(h)
 			img.set_pixel(x, y, Color(c.r * shade, c.g * shade, c.b * shade))
@@ -247,5 +248,5 @@ func _draw() -> void:
 	# pixel and vanish on hiDPI phones).
 	if _contours.size() >= 2:
 		draw_multiline(_contours, Color(0.0, 0.0, 0.0, 0.26), 2.0)
-	# Arena boundary.
-	draw_rect(Rect2(-Game.ARENA_SIZE * 0.5, Game.ARENA_SIZE), Color(0.6, 0.55, 0.8, 0.9), false, 6.0)
+	# The reef boundary.
+	draw_rect(Rect2(-Game.ARENA_SIZE * 0.5, Game.ARENA_SIZE), Color(0.95, 0.5, 0.45, 0.9), false, 6.0)
