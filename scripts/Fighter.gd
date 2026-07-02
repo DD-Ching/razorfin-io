@@ -49,6 +49,7 @@ var _bubble_cd := 0.0
 var _bleed_t := 0.0               ## the saw's wound — damage over time
 var _bleed_dps := 0.0
 var _venom_t := 0.0               ## the ray's barb — slow + light damage over time
+var _eye_poke := 0.0              ## cartoon ✕✕-eyes timer — something sharp found our face
 var _drip_cd := 0.0
 var _hitter: Fighter = null       ## who wounded us last (credits a wound-death)
 var _last_facing := 0.0
@@ -112,7 +113,7 @@ func _physics_process(delta: float) -> void:
 	# (0.045 rad ≈ the silhouette turning ~1px) — a wound tint or bar change always repaints.
 	var health_i := int(health)
 	if _hurt > 0.0 or _invuln > 0.0 or _ghosts.size() > 0 \
-			or _bleed_t > 0.0 or _venom_t > 0.0 \
+			or _bleed_t > 0.0 or _venom_t > 0.0 or _eye_poke > 0.0 \
 			or absf(facing - _last_facing) > 0.045 \
 			or health_i != _last_health_i or wet != _wet_drawn:
 		_last_facing = facing
@@ -234,6 +235,8 @@ func _tick(delta: float) -> void:
 	if _venom_t > 0.0:
 		_venom_t = maxf(0.0, _venom_t - delta)
 		_wound(Game.VENOM_DPS * delta)
+	if _eye_poke > 0.0:
+		_eye_poke = maxf(0.0, _eye_poke - delta)
 	if _chime_time > 0.0:
 		_chime_time = maxf(0.0, _chime_time - delta)
 		if _chime_time == 0.0:
@@ -267,6 +270,12 @@ func apply_bleed(dps: float, from: Fighter) -> void:
 	_bleed_dps = maxf(dps, _bleed_dps if _bleed_t > 0.0 else 0.0)
 	_bleed_t = Game.BLEED_TIME
 	_hitter = from
+
+## Something sharp found our face — the ocean's cutest wound. Purely cosmetic:
+## the eyes squeeze into a cartoon ✕✕ for a beat (the crit damage already landed).
+func poke_eyes() -> void:
+	_eye_poke = 0.9
+	queue_redraw()
 
 ## The ray's barb: slow + light damage over time.
 func apply_venom(from: Fighter) -> void:
@@ -388,6 +397,7 @@ func spawn_setup(pos: Vector2, m: float, nm: String, col: Color) -> void:
 	_cushion = 0.0
 	_bleed_t = 0.0
 	_venom_t = 0.0
+	_eye_poke = 0.0
 	_hitter = null
 	_boost_ok = true
 	boosting = false
@@ -558,14 +568,14 @@ func _draw_shark_body(col: Color, sp: int) -> void:
 		Vector2(0.6, 0.42)], col)
 	if sp != Weapon.Type.HAMMERHEAD:
 		for s in [-1.0, 1.0]:
-			draw_circle(_pt(0.55, s * 0.24), body_radius * 0.11, Color(0.08, 0.08, 0.1))
+			_draw_eye(_pt(0.55, s * 0.24), body_radius * 0.11)
 
 ## The ray plan: a wide flat disc with wingtips — the tail is the weapon, drawn there.
 func _draw_ray_body(col: Color) -> void:
 	_poly([Vector2(0.95, 0.0), Vector2(0.5, -0.6), Vector2(0.05, -1.15), Vector2(-0.55, -0.55),
 		Vector2(-0.85, 0.0), Vector2(-0.55, 0.55), Vector2(0.05, 1.15), Vector2(0.5, 0.6)], col)
 	for s in [-1.0, 1.0]:
-		draw_circle(_pt(0.45, s * 0.2), body_radius * 0.11, Color(0.08, 0.08, 0.1))
+		_draw_eye(_pt(0.45, s * 0.2), body_radius * 0.11)
 
 ## The squid plan: mantle cone pointing BACK, big eyes up front, fins at the rear —
 ## the tentacle club out front is the weapon.
@@ -578,4 +588,15 @@ func _draw_squid_body(col: Color) -> void:
 	# The famous giant eyes.
 	for s in [-1.0, 1.0]:
 		draw_circle(_pt(0.42, s * 0.3), body_radius * 0.2, Color(0.95, 0.93, 0.85))
-		draw_circle(_pt(0.48, s * 0.3), body_radius * 0.11, Color(0.08, 0.08, 0.1))
+		_draw_eye(_pt(0.48, s * 0.3), body_radius * 0.11)
+
+## One eye, top-down — a dark dot, or a cartoon ✕ for a beat after an eye poke.
+func _draw_eye(p: Vector2, r: float) -> void:
+	if _eye_poke > 0.0:
+		var c := Color(0.12, 0.1, 0.12)
+		var e := r * 1.4
+		var w := maxf(2.0, r * 0.5)
+		draw_line(p + Vector2(-e, -e), p + Vector2(e, e), c, w)
+		draw_line(p + Vector2(-e, e), p + Vector2(e, -e), c, w)
+	else:
+		draw_circle(p, r, Color(0.08, 0.08, 0.1))
