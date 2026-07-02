@@ -25,18 +25,20 @@ enum State { IDLE, SWING }
 # stiff (spring), damp, drag, avel (angular-speed cap), boost (species top-speed factor).
 # "mass" is the part's relative weight: it drives knockback/momentum, inverse whip
 # agility, and clash exchanges. "anchor" is +1 (front of the fish) or -1 (the tail).
+# "stream" is how STREAMLINED the body is (0..1): growth fattens it into slowness far
+# less, but it accelerates on a longer runway and turning scrubs its speed off.
 const TYPES := {
 	# The hammer head: heaviest — huge damage + knockback, slow to whip. Wins straight rams.
-	Type.HAMMERHEAD: {"dmg": 1.45, "knock": 2.0,  "reach": 0.8,  "head": 1.3,  "stiff": 1.1,  "damp": 1.25, "drag": 0.9,  "avel": 0.75, "mass": 1.0,  "boost": 0.95, "anchor": 1, "name": "HAMMERHEAD"},
+	Type.HAMMERHEAD: {"dmg": 1.45, "knock": 2.0,  "reach": 0.8,  "head": 1.0,  "stiff": 1.1,  "damp": 1.25, "drag": 0.9,  "avel": 0.75, "mass": 1.0,  "boost": 0.95, "anchor": 1, "stream": 0.1,  "name": "HAMMERHEAD"},
 	# The saw: long and toothed — every pass opens a BLEED. Wins drive-bys and grazes.
-	Type.SAWFISH:    {"dmg": 1.1,  "knock": 0.7,  "reach": 1.35, "head": 0.75, "stiff": 1.25, "damp": 0.9,  "drag": 1.25, "avel": 1.35, "mass": 0.5,  "boost": 1.0,  "anchor": 1, "name": "SAWFISH"},
+	Type.SAWFISH:    {"dmg": 1.1,  "knock": 0.7,  "reach": 1.35, "head": 0.75, "stiff": 1.25, "damp": 0.9,  "drag": 1.25, "avel": 1.35, "mass": 0.5,  "boost": 1.0,  "anchor": 1, "stream": 0.35, "name": "SAWFISH"},
 	# The bill: a rigid lance — almost weightless, only the TIP hurts, but it hurts.
 	# Fastest boost in the ocean: the jouster.
-	Type.SWORDFISH:  {"dmg": 2.3,  "knock": 0.5,  "reach": 1.7,  "head": 0.5,  "stiff": 1.7,  "damp": 1.15, "drag": 1.3,  "avel": 1.6,  "mass": 0.25, "boost": 1.3,  "anchor": 1, "name": "SWORDFISH"},
+	Type.SWORDFISH:  {"dmg": 2.3,  "knock": 0.5,  "reach": 1.7,  "head": 0.5,  "stiff": 1.7,  "damp": 1.15, "drag": 1.3,  "avel": 1.6,  "mass": 0.25, "boost": 1.3,  "anchor": 1, "stream": 1.0,  "name": "SWORDFISH"},
 	# The tail whip, anchored BEHIND: loose, fast, cracked by sharp turns. VENOM slows prey.
-	Type.STINGRAY:   {"dmg": 1.55, "knock": 0.95, "reach": 1.35, "head": 0.6,  "stiff": 0.5,  "damp": 0.5,  "drag": 1.6,  "avel": 1.8,  "mass": 0.4,  "boost": 1.05, "anchor": -1, "name": "STINGRAY"},
+	Type.STINGRAY:   {"dmg": 1.55, "knock": 0.95, "reach": 1.35, "head": 0.6,  "stiff": 0.5,  "damp": 0.5,  "drag": 1.6,  "avel": 1.8,  "mass": 0.4,  "boost": 1.05, "anchor": -1, "stream": 0.0,  "name": "STINGRAY"},
 	# The tentacle club: balanced and sloshy — the all-rounder (and it inks when it jets).
-	Type.SQUID:      {"dmg": 1.0,  "knock": 1.0,  "reach": 1.05, "head": 0.95, "stiff": 1.0,  "damp": 1.0,  "drag": 1.0,  "avel": 1.2,  "mass": 0.7,  "boost": 1.0,  "anchor": 1, "name": "SQUID"},
+	Type.SQUID:      {"dmg": 1.0,  "knock": 1.0,  "reach": 1.05, "head": 0.85, "stiff": 1.0,  "damp": 1.0,  "drag": 1.0,  "avel": 1.2,  "mass": 0.7,  "boost": 1.0,  "anchor": 1, "stream": 0.0,  "name": "SQUID"},
 }
 
 # Shared base feel (before per-species + per-mass scaling).
@@ -99,6 +101,9 @@ var _solid_on := true              ## alive/dead toggle for the physical part
 
 func _ready() -> void:
 	_owner = get_parent() as Fighter
+	# Render UNDER bodies: the connecting roots/necks tuck beneath the fish instead of
+	# covering its face and eyes — the part visually GROWS out of the body.
+	z_index = -1
 	_hitbox = Area2D.new()
 	# The part lives on its OWN collision layer and is monitorable, so other weapons'
 	# hitboxes can detect it — that's what makes a saw and a bill physically CLASH.
@@ -161,6 +166,9 @@ func type_name() -> String:
 
 func boost_mult() -> float:
 	return float(TYPES[type]["boost"])
+
+func streamline() -> float:
+	return float(TYPES[type].get("stream", 0.0))
 
 func is_rear_anchored() -> bool:
 	return int(TYPES[type]["anchor"]) < 0
@@ -236,7 +244,7 @@ func _fit_collider_to_silhouette() -> void:
 			_reach_ext = r * 1.0
 	if perpendicular:
 		_cap.radius = cap_r
-		_cap.height = r * 2.8 + cap_r * 2.0
+		_cap.height = r * 2.4 + cap_r * 2.0
 		_hit_capshape.position = Vector2.ZERO
 		_hit_capshape.rotation = 0.0
 	else:
@@ -589,18 +597,18 @@ func _draw_hammerhead(head: Vector2, r: float, speed_t: float, base_col: Color) 
 	# Thick neck from the body out to the head.
 	draw_line(Vector2(0, 0), head, col.darkened(0.12), r * 0.9)
 	# The wide hammer: a capsule PERPENDICULAR to the arm, eyes at both lobe tips.
-	var half := Vector2(0, r * 1.4)
+	var half := Vector2(0, r * 1.2)
 	draw_line(head - half, head + half, col, r * 1.1)
 	draw_circle(head - half, r * 0.55, col)
 	draw_circle(head + half, r * 0.55, col)
 	for s in [-1.0, 1.0]:
-		var eye := head + Vector2(r * 0.28, s * r * 1.5)
+		var eye := head + Vector2(r * 0.28, s * r * 1.3)
 		if _owner and _owner._blink > 0.0:
 			# Mid-blink: the eye closes into a soft line. (They blink. It's cute.)
 			draw_line(eye + Vector2(-r * 0.22, 0), eye + Vector2(r * 0.22, 0), Color(0.12, 0.1, 0.12), 3.0)
 		else:
-			draw_circle(eye, r * 0.2, Color(0.95, 0.95, 0.9))
-			draw_circle(eye + Vector2(r * 0.05, 0), r * 0.1, Color(0.1, 0.1, 0.12))
+			draw_circle(eye, r * 0.26, Color(0.97, 0.96, 0.9))
+			draw_circle(eye + Vector2(r * 0.09, 0), r * 0.13, Color(0.09, 0.09, 0.12))
 
 func _draw_saw(head: Vector2, r: float, speed_t: float, base_col: Color) -> void:
 	var col := _part_color(base_col, speed_t)

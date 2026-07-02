@@ -34,7 +34,7 @@ Swim into a mutation orb to change species mid-run:
 | --- | --- | --- |
 | **Hammerhead** (錘頭鯊) | the wide hammer head | Heavy ram, huge knockback — wins head-on |
 | **Sawfish** (鋸鰩) | the long toothed saw | Reach; every pass opens a **BLEED** |
-| **Swordfish** (劍魚) | the rigid bill | Only the **tip** hurts — but it lands like a lance, and it has the fastest boost |
+| **Swordfish** (劍魚) | the rigid bill | Only the **tip** hurts — but it lands like a lance. **Streamlined**: it keeps its speed as it grows and builds to a frightening cruise, but turns scrub it off |
 | **Stingray** (魟魚) | the tail whip, anchored *behind* | Sharp turns crack it; the barb **VENOMS** (slow + chip) |
 | **Giant Squid** (大王魷魚) | the tentacle club | Balanced, sloshy — and it **inks** when it jets |
 

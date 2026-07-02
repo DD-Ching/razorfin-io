@@ -217,7 +217,8 @@ func _respawn_player() -> void:
 	player.weapon.set_type(_chosen_weapon)   # keep the weapon you picked
 	Game.player_spawned.emit()
 
-## Dev: number keys 1-5 pick / switch the player's species at any time.
+## Number keys 1-5: pick a species at the start, switch anytime (dev) — and on the
+## death screen they respawn you AS that fish, so every new life is a fresh pick.
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		var t := -1
@@ -227,7 +228,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_3: t = Weapon.Type.SWORDFISH
 			KEY_4: t = Weapon.Type.STINGRAY
 			KEY_5: t = Weapon.Type.SQUID
-		if t != -1:
+		if t == -1:
+			return
+		if _awaiting_respawn:
+			_chosen_weapon = t
+			_respawn_player()
+		else:
 			_choose_weapon(t)
 
 func _choose_weapon(t: int) -> void:

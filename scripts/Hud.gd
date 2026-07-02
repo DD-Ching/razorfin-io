@@ -169,6 +169,8 @@ func _draw() -> void:
 		_center("d2", "Final size %d   •   You finished #%d" % [_final_score, _final_rank], vp, -8, 22, Color(1, 0.95, 0.8))
 		var rehint := "TAP to swim again" if touch else "Press  R  or  CLICK  to swim again"
 		_center("d3", rehint, vp, 44, 20, Color(0.85, 0.9, 1.0))
+		if not touch:
+			_center("d4", "or come back as:  [1] HAMMERHEAD   [2] SAWFISH   [3] SWORDFISH   [4] STINGRAY   [5] SQUID", vp, 86, 16, Color(0.75, 0.88, 1.0))
 
 	# --- portrait nudge (phones): the game is landscape-first ---
 	if touch and vp.x < vp.y:
