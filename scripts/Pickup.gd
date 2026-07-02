@@ -1,15 +1,16 @@
 class_name Pickup
 extends RigidBody2D
-## A loose object in the arena — the physics glue of the whole loop. GEMs are the food
-## (absorb to grow); WEAPON crates swap your head to a Hammer or Sickle. Because they
-## are real RigidBody2Ds, a swung head or a slam BATS them across the field, and death
-## sprays a fan of them — the flung, bouncing loot is where the physics engine shows.
+## A loose object in the ocean — the physics glue of the whole loop. GEMs are the food
+## (plankton morsels: absorb to grow); WEAPON orbs mutate you into another species.
+## Because they are real RigidBody2Ds, a whipped tail or a ram BATS them across the
+## water, and death sprays a fan of them — the flung, bouncing loot is where the
+## physics engine shows.
 
 enum Kind { GEM, WEAPON }
 
 var kind: int = Kind.GEM
 var value := Game.GEM_MASS
-var weapon_type: int = Weapon.Type.STONE
+var weapon_type: int = Weapon.Type.HAMMERHEAD
 var tint := Color("d9c24a")
 var consumed := false
 
@@ -31,7 +32,7 @@ func _ready() -> void:
 	_shape.shape = _circle
 	add_child(_shape)
 
-func setup(pos: Vector2, val: float, k: int, col: Color, wtype := Weapon.Type.STONE) -> void:
+func setup(pos: Vector2, val: float, k: int, col: Color, wtype := Weapon.Type.HAMMERHEAD) -> void:
 	position = pos
 	kind = k
 	value = val
@@ -79,11 +80,12 @@ func _draw() -> void:
 	draw_arc(Vector2.ZERO, r, 0.0, TAU, 14, tint.darkened(0.35), 1.5)
 
 func _draw_crate() -> void:
+	# A mutation orb: a pulsing egg-bubble stamped with the species initial.
 	var s := 16.0 * (1.0 + 0.08 * sin(_t * 4.0))
-	var box := Rect2(Vector2(-s, -s), Vector2(s * 2.0, s * 2.0))
 	var col := _crate_color()
-	draw_rect(box, col.darkened(0.1))
-	draw_rect(box, Color(0.1, 0.09, 0.08), false, 3.0)
+	draw_circle(Vector2.ZERO, s, col.darkened(0.1))
+	draw_circle(Vector2(-s * 0.3, -s * 0.3), s * 0.35, col.lightened(0.35))
+	draw_arc(Vector2.ZERO, s, 0.0, TAU, 24, Color(0.95, 0.98, 1.0, 0.8), 3.0)
 	var font := ThemeDB.fallback_font
 	if font:
 		var label := _crate_letter()
@@ -93,22 +95,26 @@ func _draw_crate() -> void:
 
 func _crate_color() -> Color:
 	match weapon_type:
-		Weapon.Type.HAMMER:
+		Weapon.Type.HAMMERHEAD:
 			return Color("c56a3a")
-		Weapon.Type.SICKLE:
+		Weapon.Type.SAWFISH:
 			return Color("6aa8c5")
-		Weapon.Type.STAFF:
+		Weapon.Type.SWORDFISH:
 			return Color("9a8a5a")
+		Weapon.Type.STINGRAY:
+			return Color("7a5cc0")
 		_:
-			return Color("8a8a92")
+			return Color("c05c74")   # squid pink
 
 func _crate_letter() -> String:
 	match weapon_type:
-		Weapon.Type.HAMMER:
+		Weapon.Type.HAMMERHEAD:
 			return "H"
-		Weapon.Type.SICKLE:
+		Weapon.Type.SAWFISH:
 			return "S"
-		Weapon.Type.STAFF:
-			return "P"
+		Weapon.Type.SWORDFISH:
+			return "B"   # the broadbill
+		Weapon.Type.STINGRAY:
+			return "R"
 		_:
-			return "O"
+			return "Q"

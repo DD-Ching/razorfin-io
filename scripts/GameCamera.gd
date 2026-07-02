@@ -1,7 +1,7 @@
 class_name GameCamera
 extends Camera2D
 ## Follows the player (it's parented to them), shakes on impact, and — the .io touch —
-## zooms OUT as the player grows, so your ever-bigger stone always stays on screen.
+## zooms OUT as the player grows, so your ever-bigger fish always stays on screen.
 
 const KICK_MAX := 42.0   ## hard cap on the directional kick offset, so a bad caller can't fling the view off-screen
 
@@ -43,7 +43,7 @@ func _process(delta: float) -> void:
 	var f := get_parent() as Fighter
 	if f:
 		# Zoomed out a bit (0.82 base) so the player reads as SMALL in a BIG map, then eases
-		# further out as they grow so the ever-bigger stone still fits.
+		# further out as they grow so the ever-bigger fish still fits.
 		var z := clampf(pow(f.mass, -0.12) * 0.82, 0.2, 0.86)   # low floor so a limitless giant still fits on screen
 		zoom = zoom.lerp(Vector2(z, z), clampf(3.0 * delta, 0.0, 1.0))
 	# Decay in REAL time: during a hitstop the scaled delta shrinks ~20x, and combat
