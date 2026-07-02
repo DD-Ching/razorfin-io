@@ -361,11 +361,13 @@ func _score_hit(victim: Fighter, speed: float) -> void:
 		dmg += knock * Game.PIN_DAMAGE
 		if show_pop:
 			Game.popup("PINNED!", victim.global_position + Vector2(0, -victim.body_radius - 16.0), Color(1.0, 0.55, 0.3), 1.1)
+	var vulnerable: bool = victim._invuln <= 0.0
 	var died := victim.take_damage(dmg, dir, knock)
 	# The two wounds — the ONLY status effects, both species-signature and readable:
-	# the saw opens a bleed, the ray's barb envenoms. Applied even on the killing blow
-	# (harmless then), attacker remembered so a wound-death still credits the hunter.
-	if not died:
+	# the saw opens a bleed, the ray's barb envenoms. They respect i-frames exactly like
+	# direct damage (a spawn shield the venom slips through is no shield at all), and
+	# the attacker is remembered so a wound-death still credits the hunter.
+	if not died and vulnerable:
 		match type:
 			Type.SAWFISH:
 				victim.apply_bleed(dmg * 0.22, _owner)
